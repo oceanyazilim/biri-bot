@@ -153,6 +153,8 @@ npm run deploy-commands
 
 ## 4. Sunucuda ilk ayarlar
 
+> **Kısa yol:** Sunucu sahibi `/auto-setup` çalıştırırsa aşağıdaki 1. ve 2. adımlar tek seferde yapılır.
+
 1. **Geçici ses:** `/kur` komutunu çalıştırın (*Sunucuyu Yönet* yetkisi gerekir). Biri, `🔊 BİRİ SES ODALARI` kategorisini ve `➕・Oda Oluştur` kanalını oluşturur ya da mevcut olanları kullanır. İsteğe bağlı seçenekler: silme gecikmesi, devir süresi, üye başına oda sayısı, varsayılan limit, mevcut kategori.
 2. **Guard:** Sunucu sahibi `/guard-kur` komutunu çalıştırır. `🛡️ BİRİ・GÜVENLİK` kategorisi ve 8 log kanalı oluşturulur. Guard **Uyarı** modunda açılır.
 3. Gerekirse güvenilir botları ve kişileri ekleyin: `/guard-guvenilir-ekle`.
@@ -204,7 +206,8 @@ npm run deploy-commands
 
 | Komut | Açıklama |
 |---|---|
-| `/kur` | Geçici ses sistemini kur / güncelle |
+| `/auto-setup` | **Tek seferde kurulum:** ses kategorisi + `➕・Oda Oluştur` kanalı, güvenlik log kategorisi + 8 log kanalı, Guard açılır (Uyarı modunda). Tekrar çalıştırmak güvenlidir. |
+| `/kur` | Yalnızca geçici ses sistemini kur / ayarlarını güncelle |
 | `/yardim` | Komut listesi |
 
 ### Varsayılan eşikler

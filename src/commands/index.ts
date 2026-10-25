@@ -1,4 +1,5 @@
 import type { SlashCommand } from '../types/command';
+import autoSetup from './admin/auto-setup';
 import kur from './admin/kur';
 import yardim from './admin/yardim';
 import guardAc from './guard/guard-ac';
@@ -66,6 +67,7 @@ export const ALL_COMMANDS: SlashCommand[] = [
   guardOlaylar,
   guardIade,
   // Admin
+  autoSetup,
   kur,
   yardim,
 ];

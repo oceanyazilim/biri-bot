@@ -40,7 +40,13 @@ const command: SlashCommand = {
             '`/guard-iade` — Alınan rolleri geri ver',
           ].join('\n'),
         },
-        { name: '⚙️ Kurulum', value: '`/kur` — Geçici ses sistemini kur (Sunucuyu Yönet yetkisi gerekir)' },
+        {
+          name: '⚙️ Kurulum',
+          value: [
+            '`/auto-setup` — Ses odaları + log kanalları + Guard, tek seferde',
+            '`/kur` — Yalnızca geçici ses sistemi (Sunucuyu Yönet yetkisi gerekir)',
+          ].join('\n'),
+        },
       );
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   },
