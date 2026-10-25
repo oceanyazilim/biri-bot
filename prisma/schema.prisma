@@ -1,0 +1,270 @@
+// Biri — database schema.
+//
+// The canonical provider is PostgreSQL (production). For local development the
+// `npm run db:sqlite` script derives an SQLite variant of this file at
+// prisma/sqlite/schema.prisma. Keep the schema portable: no enums, arrays,
+// Json columns or native @db types, so both providers accept it unchanged.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model GuildConfig {
+  guildId   String    @id
+  joinedAt  DateTime  @default(now())
+  leftAt    DateTime?
+  updatedAt DateTime  @updatedAt
+
+  tempVoiceConfig TempVoiceConfig?
+  guardConfig     GuardConfig?
+  modules         GuardModuleConfig[]
+  trusted         TrustedExecutor[]
+  managers        GuardManager[]
+  logChannels     LogChannelConfig[]
+}
+
+model TempVoiceConfig {
+  id                  String   @id @default(cuid())
+  guildId             String   @unique
+  enabled             Boolean  @default(true)
+  categoryId          String
+  creatorChannelId    String   @unique
+  /// Seconds an empty room survives before deletion.
+  emptyDeleteDelaySec Int      @default(10)
+  /// Seconds a room waits for its owner before ownership is transferred.
+  ownerGraceSec       Int      @default(30)
+  maxRoomsPerMember   Int      @default(1)
+  defaultUserLimit    Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  guild GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+}
+
+model TempVoiceRoom {
+  id          String    @id @default(cuid())
+  guildId     String
+  channelId   String    @unique
+  ownerId     String
+  name        String
+  locked      Boolean   @default(false)
+  hidden      Boolean   @default(false)
+  userLimit   Int       @default(0)
+  ownerLeftAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  restrictions RoomMemberRestriction[]
+  allowed      RoomAllowedMember[]
+
+  @@index([guildId])
+  @@index([guildId, ownerId])
+  @@index([ownerId])
+}
+
+model RoomMemberRestriction {
+  id          String   @id @default(cuid())
+  roomId      String
+  userId      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  room TempVoiceRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model RoomAllowedMember {
+  id          String   @id @default(cuid())
+  roomId      String
+  userId      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  room TempVoiceRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@unique([roomId, userId])
+  @@index([userId])
+}
+
+model GuardConfig {
+  id                  String    @id @default(cuid())
+  guildId             String    @unique
+  enabled             Boolean   @default(false)
+  /// MONITOR | ALERT | ACTIVE
+  mode                String    @default("ALERT")
+  activatedById       String?
+  activatedAt         DateTime?
+  incidentCooldownSec Int       @default(300)
+  logRetentionDays    Int       @default(90)
+  notifyOwner         Boolean   @default(true)
+  /// Comma separated role IDs mentioned in critical alerts.
+  notifyRoleIds       String    @default("")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  guild GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+}
+
+model GuardModuleConfig {
+  id            String   @id @default(cuid())
+  guildId       String
+  /// GuardModule key, e.g. CHANNEL_DELETE
+  module        String
+  enabled       Boolean  @default(true)
+  /// Count that raises a HIGH risk event (0 disables the warning tier).
+  warnThreshold Int
+  /// Count that raises the configured (critical) risk event.
+  threshold     Int
+  windowSec     Int
+  /// Severity used when the main threshold is reached: HIGH | CRITICAL
+  severity      String   @default("CRITICAL")
+  /// Whether ACTIVE mode may strip roles for this module.
+  autoStrip     Boolean
+  updatedAt     DateTime @updatedAt
+
+  guild GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, module])
+}
+
+model TrustedExecutor {
+  id        String   @id @default(cuid())
+  guildId   String
+  targetId  String
+  /// USER | ROLE | BOT
+  type      String
+  addedById String
+  note      String?
+  createdAt DateTime @default(now())
+
+  guild GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, targetId, type])
+  @@index([guildId])
+}
+
+/// Users the server owner explicitly authorised to manage Guard trust settings.
+model GuardManager {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  addedById String
+  createdAt DateTime @default(now())
+
+  guild GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, userId])
+}
+
+model SecurityEvent {
+  id               String   @id @default(cuid())
+  guildId          String
+  module           String
+  eventType        String
+  auditEntryId     String?
+  executorId       String?
+  executorVerified Boolean  @default(false)
+  targetId         String?
+  targetType       String?
+  targetName       String?
+  /// JSON encoded details.
+  details          String   @default("{}")
+  severity         String
+  actionTaken      String   @default("NONE")
+  actionSucceeded  Boolean?
+  incidentId       String?
+  occurredAt       DateTime
+  createdAt        DateTime @default(now())
+
+  incident SecurityIncident? @relation(fields: [incidentId], references: [id], onDelete: SetNull)
+
+  @@unique([guildId, auditEntryId])
+  @@index([guildId, occurredAt])
+  @@index([executorId])
+  @@index([auditEntryId])
+  @@index([incidentId])
+}
+
+model SecurityIncident {
+  id              String    @id @default(cuid())
+  guildId         String
+  executorId      String
+  module          String
+  severity        String
+  mode            String
+  /// Unique key that prevents punishing the same trigger twice.
+  dedupeKey       String    @unique
+  eventCount      Int
+  windowSec       Int
+  /// ALERTED | ROLES_STRIPPED | PARTIAL | FAILED | ESCALATED
+  actionTaken     String
+  actionSucceeded Boolean
+  failureReason   String?
+  restoredAt      DateTime?
+  restoredById    String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  events SecurityEvent[]
+  roles  SecurityIncidentRoleSnapshot[]
+
+  @@index([guildId, createdAt])
+  @@index([guildId, executorId])
+}
+
+model SecurityIncidentRoleSnapshot {
+  id            String    @id @default(cuid())
+  incidentId    String
+  roleId        String
+  roleName      String
+  position      Int
+  /// Whether the role carried administrative permissions when captured.
+  privileged    Boolean   @default(false)
+  removed       Boolean   @default(false)
+  failureReason String?
+  restored      Boolean   @default(false)
+  restoredAt    DateTime?
+
+  incident SecurityIncident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+
+  @@unique([incidentId, roleId])
+  @@index([roleId])
+}
+
+model LogChannelConfig {
+  id                  String    @id @default(cuid())
+  guildId             String
+  /// CATEGORY | GENERAL | GUARD | CHANNEL | ROLE | MEMBER | VOICE | WEBHOOK | SYSTEM
+  kind                String
+  channelId           String
+  recoveryCount       Int       @default(0)
+  recoveryWindowStart DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  guild GuildConfig @relation(fields: [guildId], references: [guildId], onDelete: Cascade)
+
+  @@unique([guildId, kind])
+  @@index([channelId])
+}
+
+model CommandAuditLog {
+  id        String   @id @default(cuid())
+  guildId   String
+  userId    String
+  command   String
+  options   String   @default("{}")
+  success   Boolean
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([guildId, createdAt])
+  @@index([userId])
+}

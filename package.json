@@ -1,0 +1,43 @@
+{
+  "name": "biri",
+  "version": "1.0.0",
+  "description": "Biri — Gelişmiş Discord geçici ses odası ve Auto Guard (anti-nuke) botu",
+  "private": true,
+  "main": "dist/index.js",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "deploy-commands": "tsx src/scripts/deployCommands.ts",
+    "deploy-commands:prod": "node dist/scripts/deployCommands.js",
+    "db:generate": "prisma generate",
+    "db:migrate:dev": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:sqlite": "node scripts/sqlite.mjs",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate",
+    "check": "npm run typecheck && npm test"
+  },
+  "dependencies": {
+    "@prisma/client": "6.19.3",
+    "discord.js": "^14.27.0",
+    "dotenv": "^16.4.7",
+    "pino": "^9.14.0",
+    "prisma": "6.19.3",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.5",
+    "pino-pretty": "^13.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "~5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
