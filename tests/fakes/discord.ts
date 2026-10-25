@@ -201,6 +201,14 @@ abstract class FakeGuildChannel {
   isTextBased() {
     return false;
   }
+  rawPosition = 0;
+  setPosition = vi.fn(async (position: number) => {
+    this.rawPosition = position;
+    return this;
+  });
+  toString() {
+    return `<#${this.id}>`;
+  }
   setParent = vi.fn(async (parentId: string) => {
     this.parentId = parentId;
     return this;
@@ -244,6 +252,14 @@ export class FakeTextChannel extends FakeGuildChannel {
   override isTextBased() {
     return true;
   }
+  /** Mirrors discord.js: the copy lands at the end of its category until repositioned. */
+  clone = vi.fn(async () => {
+    if (this.guild.failChannelCreate) throw new DiscordError(RESTJSONErrorCodes.MissingPermissions);
+    const copy = new FakeTextChannel(this.guild, { name: this.name, parentId: this.parentId });
+    copy.rawPosition = this.rawPosition + 1;
+    this.guild.channels.cache.set(copy.id, copy);
+    return copy;
+  });
 }
 
 export class FakeVoiceChannel extends FakeGuildChannel {

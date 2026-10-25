@@ -42,7 +42,9 @@ export interface UnattributedInput {
 }
 
 export interface CommandActionInput {
-  module: Extract<GuardModule, 'MEMBER_BAN' | 'MEMBER_KICK'>;
+  module: Extract<GuardModule, 'MEMBER_BAN' | 'MEMBER_KICK' | 'CHANNEL_DELETE'>;
+  /** Defaults to USER. */
+  targetType?: 'USER' | 'CHANNEL';
   command: string;
   executorId: string;
   targetId: string;
@@ -163,7 +165,7 @@ export class SecurityEventProcessor {
       executorVerified: true,
       attribution: 'BOT_COMMAND',
       targetId: input.targetId,
-      targetType: 'USER',
+      targetType: input.targetType ?? 'USER',
       targetName: input.targetName,
       baseSeverity: 'LOW',
       weight: 1,

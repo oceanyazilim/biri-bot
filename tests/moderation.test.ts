@@ -1,17 +1,17 @@
 import { Collection, PermissionFlagsBits, type AutocompleteInteraction, type ChatInputCommandInteraction, type GuildMember } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { App } from '../src/core/App';
-import { ModerationService, type ModerationAction } from '../src/modules/moderation/ModerationService';
+import { ModerationService, type ModerationAction, type NukeableChannel } from '../src/modules/moderation/ModerationService';
 import banCommand from '../src/commands/moderation/ban';
 import kickCommand from '../src/commands/moderation/kick';
 import unbanCommand, { forgetBans } from '../src/commands/moderation/unban';
 import { createSilentLogger } from '../src/utils/logger';
-import { asDiscord, BOT_ID, nextSnowflake, type FakeMember } from './fakes/discord';
+import { asDiscord, BOT_ID, nextSnowflake, type FakeMember, type FakeTextChannel } from './fakes/discord';
 import { createGuardHarness, type GuardHarnessOptions } from './fakes/guardHarness';
 
 async function modHarness(options: GuardHarnessOptions = {}) {
   const h = await createGuardHarness(options);
-  const moderation = new ModerationService(h.processor, createSilentLogger());
+  const moderation = new ModerationService(h.processor, createSilentLogger(), h.selfActions);
   const modRole = h.guild.addRole({ name: 'Moderatör', position: 15, permissions: PermissionFlagsBits.BanMembers | PermissionFlagsBits.KickMembers });
   const moderator = h.guild.addMember({ name: 'Moderatör', roles: [modRole] });
   const victim = h.guild.addMember({ name: 'Kurban', roles: [h.memberRole] });
@@ -231,5 +231,58 @@ describe('slash commands', () => {
     await ask('spam');
     expect(guild.bans.fetch).toHaveBeenCalledTimes(2);
     void h;
+  });
+});
+
+describe('nuke', () => {
+  async function nukeHarness(options: GuardHarnessOptions = {}) {
+    const h = await modHarness(options);
+    h.modRole.permissions.bitfield |= PermissionFlagsBits.ManageChannels;
+    const nuke = (channel: FakeTextChannel, by: FakeMember = h.moderator) =>
+      h.moderation.nuke({ guild: h.discordGuild, moderator: asDiscord<GuildMember>(by), channel: asDiscord<NukeableChannel>(channel), reason: 'reklam', invocationId: nextSnowflake() });
+    return { ...h, nuke };
+  }
+
+  it('recreates the channel in place and deletes the original', async () => {
+    const h = await nukeHarness();
+    const channel = h.guild.addTextChannel('sohbet');
+    channel.rawPosition = 4;
+    const result = await h.nuke(channel);
+    expect(result.ok).toBe(true);
+    expect(channel.delete).toHaveBeenCalledWith(expect.stringContaining(`(${h.moderator.id}): reklam`));
+    expect(h.guild.channels.cache.has(channel.id)).toBe(false);
+    const fresh = h.guild.channels.cache.get(result.channel!.id) as FakeTextChannel;
+    expect(fresh.name).toBe('sohbet');
+    expect(fresh.rawPosition).toBe(4);
+    expect(fresh.sent).toHaveLength(1);
+    expect(h.selfActions.isSelfAction(h.guild.id, 'CHANNEL_DELETE', channel.id)).toBe(true);
+  });
+
+  it('requires Manage Channels', async () => {
+    const h = await nukeHarness();
+    const channel = h.guild.addTextChannel('sohbet');
+    const result = await h.nuke(channel, h.victim);
+    expect(result.message).toContain('Kanalları Yönet');
+    expect(channel.clone).not.toHaveBeenCalled();
+  });
+
+  it('removes the copy when the original cannot be deleted', async () => {
+    const h = await nukeHarness();
+    const channel = h.guild.addTextChannel('sohbet');
+    channel.delete.mockRejectedValueOnce(new Error('Missing Permissions'));
+    const result = await h.nuke(channel);
+    expect(result.ok).toBe(false);
+    expect([...h.guild.channels.cache.values()].filter((c) => c.name === 'sohbet')).toHaveLength(1);
+  });
+
+  it('counts as channel deletion for Guard and blocks a mass nuke', async () => {
+    const h = await nukeHarness({ mode: 'ACTIVE' });
+    const channels = Array.from({ length: 5 }, (_, i) => h.guild.addTextChannel(`kanal-${i}`));
+    const results = [];
+    for (const channel of channels) results.push(await h.nuke(channel));
+    expect(results.map((r) => r.ok)).toEqual([true, true, true, true, false]);
+    expect(results[4]?.blockedByGuard).toBe(true);
+    expect(h.repos.guard.incidents[0]).toMatchObject({ executorId: h.moderator.id, module: 'CHANNEL_DELETE', actionTaken: 'ROLES_STRIPPED' });
+    expect(h.guild.channels.cache.has(channels[4]!.id)).toBe(true);
   });
 });

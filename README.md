@@ -112,7 +112,7 @@ https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20application
 | Bağlan | Ses kanallarına erişim |
 | Mesaj Gönder, Bağlantı Yerleştir, Mesaj Geçmişini Oku | Log ve bilgilendirme mesajları |
 | Denetim Kaydını Görüntüle | Guard'ın işlemi kimin yaptığını belirlemesi |
-| Üyeleri Yasakla, Üyeleri At | `/ban`, `/kick`, `/unban` komutları |
+| Üyeleri Yasakla, Üyeleri At | `/ban`, `/kick`, `/unban` komutları (rol sırası yetmez, izin rolde açık olmalı) |
 
 > **Yönetici (Administrator) izni vermeyin.** Biri buna ihtiyaç duymaz.
 
@@ -230,6 +230,7 @@ Komutlar yalnızca ilgili yetkiye sahip üyelerin `/` menüsünde görünür.
 | `/ban kullanici [sebep] [mesaj-sil]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan biri de ID ile seçilebilir. `mesaj-sil`: son 1 saat – 7 güne kadar mesajlarını da siler. |
 | `/kick kullanici [sebep]` | Üyeleri At | Sunucudan atar. |
 | `/unban kullanici [sebep]` | Üyeleri Yasakla | Yasağı kaldırır. Yazmaya başlayınca yasaklılar listesi açılır. Banı kaldırmak saldırı sayılmaz, Guard'a işlenmez. |
+| `/nuke [kanal] [sebep]` | Kanalları Yönet | Kanalı sıfırlar: aynı ad, konu, izin ve konumla kopyalar, eskisini tüm mesajlarıyla siler. Onay düğmesi ister. Log ve oda paneli kanallarında çalışmaz. Guard'a kanal silme olarak işlenir; toplu nuke engellenir. |
 
 - Rol hiyerarşisi uygulanır: kendinizle aynı veya daha yüksek roldeki birini, sunucu sahibini ya da kendinizi banlayamazsınız.
 - Hedef kişiye mümkünse sebebi içeren bir DM gönderilir. Denetim kaydına `Yetkili (ID): sebep` yazılır.

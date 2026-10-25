@@ -1,10 +1,19 @@
-import { PermissionFlagsBits, RESTJSONErrorCodes, type EmbedBuilder, type Guild, type GuildMember } from 'discord.js';
+import {
+  PermissionFlagsBits,
+  RESTJSONErrorCodes,
+  type EmbedBuilder,
+  type Guild,
+  type GuildMember,
+  type NewsChannel,
+  type TextChannel,
+} from 'discord.js';
 import { COLORS } from '../../config/constants';
 import { describeError, discordErrorCode } from '../../utils/discordErrors';
 import { clip, userMention } from '../../utils/format';
 import type { Logger } from '../../utils/logger';
 import type { SecurityEventProcessor } from '../guard/SecurityEventProcessor';
 import { brandEmbed } from '../logging/embeds';
+import type { SelfActionRegistry } from '../../services/SelfActionRegistry';
 
 export type ModerationAction = 'BAN' | 'KICK' | 'UNBAN';
 
@@ -31,7 +40,30 @@ const ACTIONS: Record<Exclude<ModerationAction, 'UNBAN'>, ActionSpec> = {
 
 const ENFORCED = new Set(['ROLES_STRIPPED', 'PARTIAL', 'FAILED', 'ESCALATED']);
 
+/** Role position alone grants nothing; the permission itself must be enabled on Biri's role. */
+const botPermissionHint = (label: string, channel = false): string =>
+  `Biri'nin **${label}** yetkisi yok${channel ? ' (bu kanalda)' : ''}.
+` +
+  `Rolün en üstte olması yetmez, iznin kendisi açık olmalı: **Sunucu Ayarları → Roller → Biri → ${label}** iznini açın` +
+  `${channel ? ' ve kanal izinlerinde Biri için kapatılmadığından emin olun' : ''}, ya da botu güncel davet bağlantısıyla yeniden ekleyin.`;
+
 const fail = (message: string, blockedByGuard = false): ModerationResult => ({ ok: false, message, blockedByGuard });
+
+export type NukeableChannel = TextChannel | NewsChannel;
+
+export interface NukeRequest {
+  guild: Guild;
+  moderator: GuildMember;
+  channel: NukeableChannel;
+  reason: string | null;
+  invocationId: string;
+}
+
+export interface NukeResult extends ModerationResult {
+  channel?: NukeableChannel;
+}
+
+type ModerationLogKind = 'MEMBER' | 'CHANNEL';
 
 export interface ModerationRequest {
   action: ModerationAction;
@@ -51,14 +83,15 @@ export interface ModerationRequest {
  * attributed to the moderator, so bot-proxied mass bans are still detected.
  */
 export class ModerationService {
-  private logSink: ((guildId: string, embed: EmbedBuilder) => void) | null = null;
+  private logSink: ((guildId: string, embed: EmbedBuilder, kind: ModerationLogKind) => void) | null = null;
 
   constructor(
     private readonly processor: SecurityEventProcessor,
     private readonly logger: Logger,
+    private readonly selfActions?: SelfActionRegistry,
   ) {}
 
-  setLogSink(sink: (guildId: string, embed: EmbedBuilder) => void): void {
+  setLogSink(sink: (guildId: string, embed: EmbedBuilder, kind: ModerationLogKind) => void): void {
     this.logSink = sink;
   }
 
@@ -69,7 +102,7 @@ export class ModerationService {
     const me = guild.members.me;
 
     if (!moderator.permissions.has(spec.permission)) return fail(`Bu komut için **${spec.permissionLabel}** yetkin yok.`);
-    if (!me?.permissions.has(spec.permission)) return fail(`Biri'nin **${spec.permissionLabel}** yetkisi yok.`);
+    if (!me?.permissions.has(spec.permission)) return fail(botPermissionHint(spec.permissionLabel));
     if (targetId === moderator.id) return fail(`Kendini ${spec.verb}.`);
     if (targetId === guild.ownerId) return fail(`Sunucu sahibini ${spec.verb}.`);
     if (targetId === me.id) return fail(`Biri'yi bu komutla ${spec.verb}.`);
@@ -130,6 +163,7 @@ export class ModerationService {
       brandEmbed(action === 'BAN' ? COLORS.critical : COLORS.warning)
         .setTitle(action === 'BAN' ? '🔨 Üye Yasaklandı' : '👢 Üye Atıldı')
         .setDescription(`${text}\n**Kullanıcı ID:** \`${targetId}\``),
+      'MEMBER',
     );
     return { ok: true, message: text };
   }
@@ -138,7 +172,7 @@ export class ModerationService {
   private async unban(request: ModerationRequest): Promise<ModerationResult> {
     const { guild, moderator, targetId } = request;
     if (!moderator.permissions.has(PermissionFlagsBits.BanMembers)) return fail('Bu komut için **Üyeleri Yasakla** yetkin yok.');
-    if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) return fail("Biri'nin **Üyeleri Yasakla** yetkisi yok.");
+    if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) return fail(botPermissionHint('Üyeleri Yasakla'));
 
     const reasonText = request.reason?.trim() || null;
     try {
@@ -155,7 +189,80 @@ export class ModerationService {
       guild.id,
       brandEmbed(COLORS.success).setTitle('✅ Yasak Kaldırıldı').setDescription(`${text}
 **Kullanıcı ID:** \`${targetId}\``),
+      'MEMBER',
     );
     return { ok: true, message: text };
+  }
+
+  /**
+   * Wipes a text channel by cloning it (name, topic, permissions, slowmode,
+   * category and position are kept) and deleting the original. Counted by
+   * Guard as a channel deletion attributed to the moderator.
+   */
+  async nuke(request: NukeRequest): Promise<NukeResult> {
+    const { guild, moderator, channel } = request;
+    const me = guild.members.me;
+    if (!channel.permissionsFor(moderator).has(PermissionFlagsBits.ManageChannels)) return fail('Bu kanal için **Kanalları Yönet** yetkin yok.');
+    if (!me || !channel.permissionsFor(me).has(PermissionFlagsBits.ManageChannels)) return fail(botPermissionHint('Kanalları Yönet', true));
+
+    const reasonText = request.reason?.trim() || null;
+    const guard = await this.processor
+      .processCommandAction(guild, {
+        module: 'CHANNEL_DELETE',
+        command: 'nuke',
+        executorId: moderator.id,
+        targetId: channel.id,
+        targetType: 'CHANNEL',
+        targetName: channel.name,
+        reason: reasonText,
+        dedupeId: `cmd:${request.invocationId}`,
+      })
+      .catch((error: unknown) => {
+        this.logger.error({ err: error, guildId: guild.id }, 'Nuke işlemi Guard tarafından değerlendirilemedi');
+        return null;
+      });
+    const sanctioned = guard?.outcome && !guard.outcome.duplicate && ENFORCED.has(guard.outcome.action);
+    if (sanctioned || !channel.permissionsFor(moderator).has(PermissionFlagsBits.ManageChannels)) {
+      return fail('🛡️ Biri Guard kısa sürede çok fazla kanal silme algıladı. Bu işlem **engellendi** ve yöneticiler bilgilendirildi.', true);
+    }
+
+    const auditReason = clip(`Nuke — ${moderator.user.tag} (${moderator.id}): ${reasonText ?? 'Sebep belirtilmedi'}`, 512);
+    const position = channel.rawPosition;
+    let fresh: NukeableChannel;
+    try {
+      fresh = await channel.clone({ reason: auditReason });
+    } catch (error) {
+      return fail(`Kanal kopyalanamadı: ${describeError(error)}`);
+    }
+    this.selfActions?.register(guild.id, 'CHANNEL_DELETE', channel.id);
+    try {
+      await channel.delete(auditReason);
+    } catch (error) {
+      this.selfActions?.unregister(guild.id, 'CHANNEL_DELETE', channel.id);
+      await fresh.delete('Nuke başarısız, kopya kaldırıldı').catch(() => undefined);
+      return fail(`Kanal silinemedi: ${describeError(error)}`);
+    }
+    if (fresh.rawPosition !== position) await fresh.setPosition(position, { reason: auditReason }).catch(() => undefined);
+
+    await fresh
+      .send({
+        embeds: [
+          brandEmbed(COLORS.critical)
+            .setTitle('💥 Kanal Sıfırlandı')
+            .setDescription(`Bu kanal ${userMention(moderator.id)} tarafından sıfırlandı.${reasonText ? `\n**Sebep:** ${reasonText}` : ''}`),
+        ],
+        allowedMentions: { parse: [] },
+      })
+      .catch(() => undefined);
+
+    const text = `💥 **#${channel.name}** kanalı sıfırlandı → ${fresh.toString()}\n**Yetkili:** ${userMention(moderator.id)}\n**Sebep:** ${reasonText ?? 'Belirtilmedi'}`;
+    this.logSink?.(
+      guild.id,
+      brandEmbed(COLORS.critical)
+        .setTitle('💥 Kanal Nuke')
+        .setDescription(`${text}\n**Eski kanal ID:** \`${channel.id}\`\n**Yeni kanal ID:** \`${fresh.id}\``),
+      'CHANNEL',
+    );
+    return { ok: true, message: text, channel: fresh };
   }
 }

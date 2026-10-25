@@ -4,6 +4,7 @@ import kur from './admin/kur';
 import yardim from './admin/yardim';
 import ban from './moderation/ban';
 import kick from './moderation/kick';
+import nuke from './moderation/nuke';
 import unban from './moderation/unban';
 import guardAc from './guard/guard-ac';
 import guardAyar from './guard/guard-ayar';
@@ -72,6 +73,7 @@ export const ALL_COMMANDS: SlashCommand[] = [
   // Moderation
   ban,
   kick,
+  nuke,
   unban,
   // Admin
   autoSetup,

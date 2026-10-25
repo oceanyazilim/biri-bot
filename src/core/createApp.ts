@@ -81,8 +81,8 @@ export function createApp(env: Env, logger: Logger): App {
   const incidents = new IncidentManager(repos.guard, guardLogger);
   const reporter = new GuardReporter(logDispatcher, repos.guard, guardLogger);
   const processor = new SecurityEventProcessor({ config: guardConfig, trust, repo: repos.guard, incidents, reporter, logger: guardLogger, health });
-  const moderation = new ModerationService(processor, logger.child({ module: 'moderation' }));
-  moderation.setLogSink((guildId, embed) => logDispatcher.enqueue(guildId, 'MEMBER', embed));
+  const moderation = new ModerationService(processor, logger.child({ module: 'moderation' }), selfActions);
+  moderation.setLogSink((guildId, embed, kind) => logDispatcher.enqueue(guildId, kind, embed));
   const guard = new GuardService(processor, correlator, guardConfig, repos.guard, logChannels, selfActions, guardLogger);
   guard.setFetchedEntryListener((guild, entry) => auditFeed.handle(guild, entry));
 

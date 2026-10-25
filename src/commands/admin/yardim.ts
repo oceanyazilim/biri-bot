@@ -46,6 +46,7 @@ const command: SlashCommand = {
             '`/ban` — Sunucudan yasakla (isteğe bağlı mesaj silme)',
             '`/kick` — Sunucudan at',
             '`/unban` — Yasağı kaldır (yasaklılar listesinden seç)',
+            '`/nuke` — Kanalı sıfırla (tüm mesajları siler, onay ister)',
           ].join('\n'),
         },
         {
