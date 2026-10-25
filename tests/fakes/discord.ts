@@ -217,9 +217,30 @@ export class FakeCategory extends FakeGuildChannel {
   }
 }
 
+export class FakeMessage {
+  id = nextSnowflake();
+  constructor(public payload: unknown) {}
+  edit = vi.fn(async (payload: unknown) => {
+    this.payload = payload;
+    return this;
+  });
+}
+
 export class FakeTextChannel extends FakeGuildChannel {
   type = ChannelType.GuildText as const;
-  send = vi.fn(async () => undefined);
+  sent: FakeMessage[] = [];
+  send = vi.fn(async (payload: unknown) => {
+    const message = new FakeMessage(payload);
+    this.sent.push(message);
+    return message;
+  });
+  messages = {
+    fetch: vi.fn(async (id: string) => {
+      const message = this.sent.find((m) => m.id === id);
+      if (!message) throw new DiscordError(RESTJSONErrorCodes.UnknownMessage, 'Unknown Message');
+      return message;
+    }),
+  };
   override isTextBased() {
     return true;
   }

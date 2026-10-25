@@ -68,6 +68,10 @@ class PrismaTempVoiceRepository implements TempVoiceRepository {
     await this.prisma.tempVoiceConfig.updateMany({ where: { guildId }, data: { enabled } });
   }
 
+  async setPanel(guildId: string, panelChannelId: string | null, panelMessageId: string | null): Promise<void> {
+    await this.prisma.tempVoiceConfig.updateMany({ where: { guildId }, data: { panelChannelId, panelMessageId } });
+  }
+
   findRoomByChannel(channelId: string) {
     return this.prisma.tempVoiceRoom.findUnique({ where: { channelId } });
   }

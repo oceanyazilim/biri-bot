@@ -70,6 +70,13 @@ const command: SlashCommand = {
         { name: 'Sahiplik Devri', value: formatDuration(config.ownerGraceSec), inline: true },
         { name: 'Üye Başına Oda', value: String(config.maxRoomsPerMember), inline: true },
         { name: 'Varsayılan Limit', value: config.defaultUserLimit === 0 ? 'Limitsiz' : String(config.defaultUserLimit), inline: true },
+        {
+          name: 'Kontrol Paneli',
+          value: result.panel.channelId
+            ? `${channelMention(result.panel.channelId)}${result.panel.created ? ' (yeni)' : ' (güncellendi)'}`
+            : `❌ Oluşturulamadı${result.panel.error ? `: ${result.panel.error}` : ''}`,
+          inline: true,
+        },
         { name: 'Log', value: logNote },
       );
     await interaction.editReply({ embeds: [embed] });

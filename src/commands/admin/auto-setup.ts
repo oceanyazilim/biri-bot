@@ -42,7 +42,11 @@ const command: SlashCommand = {
           name: '🔊 Ses Odaları',
           value:
             `✅ Kategori: ${channelMention(voice.config.categoryId)}${voice.createdCategory ? ' (yeni)' : ' (mevcut)'}\n` +
-            `✅ Oluşturma kanalı: ${channelMention(voice.config.creatorChannelId)}${voice.createdCreator ? ' (yeni)' : ' (mevcut)'}`,
+            `✅ Oluşturma kanalı: ${channelMention(voice.config.creatorChannelId)}${voice.createdCreator ? ' (yeni)' : ' (mevcut)'}
+` +
+            (voice.panel.channelId
+              ? `✅ Kontrol paneli: ${channelMention(voice.panel.channelId)}${voice.panel.created ? ' (yeni)' : ' (güncellendi)'}`
+              : `❌ Kontrol paneli oluşturulamadı${voice.panel.error ? `: ${voice.panel.error}` : ''}`),
         });
       } catch (error) {
         failed = true;

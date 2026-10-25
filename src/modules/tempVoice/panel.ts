@@ -153,3 +153,65 @@ export function buildSettingsModal(channelId: string, currentName: string, curre
       ),
     );
 }
+
+export const HUB_CHANNEL_NAME = '🎛️・oda-paneli';
+
+/**
+ * The persistent control panel posted in the temp voice category. Its buttons
+ * carry no room id: every click acts on the clicking member's own room, so a
+ * single message serves everyone and keeps working across restarts.
+ */
+export function buildHubPanel(creatorChannelId: string) {
+  const embed = brandEmbed(COLORS.primary)
+    .setTitle('🎛️ Biri • Oda Kontrol Paneli')
+    .setDescription(
+      `${channelMention(creatorChannelId)} kanalına katılarak kendi ses odanı oluştur, sonra odanı buradan yönet.\n\n` +
+        'Düğmeler **yalnızca senin odan** üzerinde işlem yapar ve yanıtları sadece sen görürsün.',
+    )
+    .addFields(
+      { name: '🔒 Erişim', value: 'Kilitle, kilidi aç, gizle veya göster', inline: true },
+      { name: '👥 Kullanıcılar', value: 'Odadan at, engelle, özel izin ver', inline: true },
+      { name: '⚙️ Oda', value: 'İsim ve limit, sahiplik devri, kapatma', inline: true },
+    );
+  const button = (action: string, label: string, emoji: string, style = ButtonStyle.Secondary) =>
+    new ButtonBuilder().setCustomId(customId('hub', action)).setLabel(label).setEmoji(emoji).setStyle(style);
+  return {
+    embeds: [embed],
+    components: [
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        button('lock', 'Kilitle', '🔒'),
+        button('unlock', 'Kilidi Aç', '🔓'),
+        button('hide', 'Gizle', '🙈'),
+        button('show', 'Göster', '👁️'),
+        button('info', 'Oda Bilgisi', 'ℹ️', ButtonStyle.Primary),
+      ),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        button('kick', 'Odadan At', '👢'),
+        button('block', 'Engelle', '⛔'),
+        button('unblock', 'Engeli Kaldır', '✅'),
+        button('allow', 'İzin Ver', '🎟️'),
+        button('disallow', 'İzni Kaldır', '🚫'),
+      ),
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        button('settings', 'İsim / Limit', '✏️'),
+        button('transfer', 'Sahipliği Devret', '👑'),
+        button('close', 'Odayı Kapat', '🗑️', ButtonStyle.Danger),
+      ),
+    ],
+  };
+}
+
+/** A single user picker for one operation, used by the control panel. */
+export function buildUserPicker(operation: UserOperation, channelId: string) {
+  return {
+    components: [
+      new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
+        new UserSelectMenuBuilder()
+          .setCustomId(customId('room', 'user', operation, channelId))
+          .setPlaceholder(USER_OPERATIONS[operation].placeholder)
+          .setMinValues(1)
+          .setMaxValues(1),
+      ),
+    ],
+  };
+}

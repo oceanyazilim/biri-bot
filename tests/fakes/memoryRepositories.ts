@@ -48,13 +48,26 @@ export class MemoryTempVoiceRepository implements TempVoiceRepository {
   async upsertConfig(guildId: string, input: TempVoiceConfigInput) {
     const now = new Date();
     const existing = this.configs.get(guildId);
-    const config: TempVoiceConfig = { id: existing?.id ?? nextId(), guildId, enabled: true, createdAt: existing?.createdAt ?? now, updatedAt: now, ...input };
+    const config: TempVoiceConfig = {
+      id: existing?.id ?? nextId(),
+      guildId,
+      enabled: true,
+      panelChannelId: existing?.panelChannelId ?? null,
+      panelMessageId: existing?.panelMessageId ?? null,
+      createdAt: existing?.createdAt ?? now,
+      updatedAt: now,
+      ...input,
+    };
     this.configs.set(guildId, config);
     return config;
   }
   async setConfigEnabled(guildId: string, enabled: boolean) {
     const config = this.configs.get(guildId);
     if (config) this.configs.set(guildId, { ...config, enabled });
+  }
+  async setPanel(guildId: string, panelChannelId: string | null, panelMessageId: string | null) {
+    const config = this.configs.get(guildId);
+    if (config) this.configs.set(guildId, { ...config, panelChannelId, panelMessageId });
   }
   async findRoomByChannel(channelId: string) {
     return this.rooms.get(channelId) ?? null;

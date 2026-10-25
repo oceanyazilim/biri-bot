@@ -36,6 +36,7 @@ Tüm kullanıcı mesajları Türkçedir. Kod ve teknik dokümantasyon İngilizce
 - Sahip ayrılınca bekleme süresi sonunda sahiplik, odada en uzun süredir bulunan kişiye geçer
 - Kilitleme, gizleme, limit, isim, odaya özel engel/izin, sahiplik devri
 - Etkileşimli yönetim paneli (`/odam`): butonlar, kullanıcı seçme menüleri, ayar penceresi
+- Kalıcı **🎛️・oda-paneli** kanalı: ses kategorisinde, herkesin kendi odasını düğmelerle yönettiği sabit menü (kilitle, aç, gizle, göster, at, engelle, izin ver, isim/limit, devret, kapat). Bot yeniden başlasa da çalışır; kanal üyeler için salt okunurdur.
 - Bot yeniden başlarsa oda durumu veritabanından kurtarılır
 - Kalıcı kanallar asla silinmez: yalnızca veritabanında kayıtlı geçici odalar silinir
 - Oda sahiplerine **hiçbir sunucu geneli yetki verilmez**. `/at` yalnızca sesten çıkarır, sunucudan atmaz.
@@ -221,7 +222,7 @@ npm run deploy-commands
 
 | Komut | Açıklama |
 |---|---|
-| `/auto-setup` | **Tek seferde kurulum:** ses kategorisi + `➕・Oda Oluştur` kanalı, güvenlik log kategorisi + 8 log kanalı, Guard açılır (Uyarı modunda). Tekrar çalıştırmak güvenlidir. |
+| `/auto-setup` | **Tek seferde kurulum:** ses kategorisi + `➕・Oda Oluştur` kanalı + `🎛️・oda-paneli` kontrol paneli, güvenlik log kategorisi + 8 log kanalı, Guard açılır (Uyarı modunda). Tekrar çalıştırmak güvenlidir. |
 | `/kur` | Yalnızca geçici ses sistemini kur / ayarlarını güncelle |
 | `/yardim` | Komut listesi |
 

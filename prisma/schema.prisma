@@ -40,6 +40,9 @@ model TempVoiceConfig {
   ownerGraceSec       Int      @default(30)
   maxRoomsPerMember   Int      @default(1)
   defaultUserLimit    Int      @default(0)
+  /// Persistent control panel text channel and its message.
+  panelChannelId      String?
+  panelMessageId      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

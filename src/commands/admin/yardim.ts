@@ -8,7 +8,7 @@ const command: SlashCommand = {
   async execute(interaction) {
     const embed = brandEmbed()
       .setTitle('📖 Biri • Komutlar')
-      .setDescription('**➕・Oda Oluştur** kanalına katılarak kendi ses odanı oluşturabilirsin.')
+      .setDescription('**➕・Oda Oluştur** kanalına katılarak kendi ses odanı oluşturabilirsin. Odanı **🎛️・oda-paneli** kanalındaki düğmelerle de yönetebilirsin.')
       .addFields(
         {
           name: '🔊 Oda Yönetimi',

@@ -54,6 +54,7 @@ export interface TempVoiceRepository {
   listConfigs(): Promise<TempVoiceConfig[]>;
   upsertConfig(guildId: string, input: TempVoiceConfigInput): Promise<TempVoiceConfig>;
   setConfigEnabled(guildId: string, enabled: boolean): Promise<void>;
+  setPanel(guildId: string, panelChannelId: string | null, panelMessageId: string | null): Promise<void>;
 
   findRoomByChannel(channelId: string): Promise<TempVoiceRoom | null>;
   findRoomsByOwner(guildId: string, ownerId: string): Promise<TempVoiceRoom[]>;

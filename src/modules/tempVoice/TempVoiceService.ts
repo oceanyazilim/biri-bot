@@ -1,9 +1,12 @@
 import {
   ChannelType,
+  OverwriteType,
   PermissionFlagsBits,
   type CategoryChannel,
   type Guild,
   type GuildMember,
+  type OverwriteResolvable,
+  type TextChannel,
   type VoiceBasedChannel,
   type VoiceChannel,
   type VoiceState,
@@ -24,6 +27,7 @@ import type { Logger } from '../../utils/logger';
 import { TimerRegistry } from '../../utils/timers';
 import { brandEmbed } from '../logging/embeds';
 import { JoinTracker, pickSuccessor } from './JoinTracker';
+import { buildHubPanel, HUB_CHANNEL_NAME } from './panel';
 import { buildRoomName } from './roomNaming';
 import { computeRoomOverwrites, toOverwriteOptions, type BaseOverwrite, type RoomPermissionState } from './roomPermissions';
 
@@ -37,12 +41,21 @@ export interface TempVoiceSetupOptions {
   ownerGraceSec: number;
   maxRoomsPerMember: number;
   defaultUserLimit: number;
+  /** Create the persistent control panel channel (default true). */
+  panel?: boolean;
 }
 
 export interface TempVoiceSetupResult {
   config: TempVoiceConfig;
   createdCategory: boolean;
   createdCreator: boolean;
+  panel: PanelResult;
+}
+
+export interface PanelResult {
+  channelId: string | null;
+  created: boolean;
+  error: string | null;
 }
 
 export type TransferResult =
@@ -171,8 +184,83 @@ export class TempVoiceService {
         defaultUserLimit: options.defaultUserLimit,
       });
       this.configs.set(guild.id, config);
-      return { config, createdCategory, createdCreator };
+      const panel = await this.ensurePanel(guild, config, { create: options.panel ?? true });
+      return { config: this.configs.get(guild.id) ?? config, createdCategory, createdCreator, panel };
     });
+  }
+
+  /**
+   * Creates or refreshes the persistent control panel: a read-only text channel
+   * in the temp voice category holding one message with room controls. An
+   * existing message is edited in place, so there is never more than one.
+   */
+  async ensurePanel(guild: Guild, config: TempVoiceConfig, options: { create: boolean }): Promise<PanelResult> {
+    try {
+      let channel: TextChannel | null = null;
+      if (config.panelChannelId) {
+        const stored = guild.channels.cache.get(config.panelChannelId) ?? (await guild.channels.fetch(config.panelChannelId).catch(() => null));
+        if (stored?.type === ChannelType.GuildText) channel = stored;
+      }
+      const category = this.categoryFor(guild, config);
+      let created = false;
+      if (!channel && options.create) {
+        channel =
+          category?.children.cache.find(
+            (child): child is TextChannel => child.type === ChannelType.GuildText && child.name === HUB_CHANNEL_NAME,
+          ) ?? null;
+        if (!channel) {
+          channel = await guild.channels.create({
+            name: HUB_CHANNEL_NAME,
+            type: ChannelType.GuildText,
+            parent: category?.id ?? null,
+            topic: 'Geçici ses odanı buradaki düğmelerle yönet.',
+            permissionOverwrites: this.panelOverwrites(guild, category),
+            reason: 'Biri oda kontrol paneli',
+          });
+          this.selfActions.register(guild.id, 'CHANNEL_CREATE', channel.id);
+          created = true;
+        }
+      }
+      if (!channel) return { channelId: null, created: false, error: null };
+
+      const payload = { ...buildHubPanel(config.creatorChannelId), allowedMentions: { parse: [] as [] } };
+      const existing =
+        config.panelMessageId && config.panelChannelId === channel.id
+          ? await channel.messages.fetch(config.panelMessageId).catch(() => null)
+          : null;
+      const message = existing ? await existing.edit(payload) : await channel.send(payload);
+      await this.repo.setPanel(guild.id, channel.id, message.id);
+      this.configs.set(guild.id, { ...config, panelChannelId: channel.id, panelMessageId: message.id });
+      return { channelId: channel.id, created, error: null };
+    } catch (error) {
+      this.logger.warn({ err: error, guildId: guild.id }, 'Oda kontrol paneli kurulamadı');
+      return { channelId: null, created: false, error: describeError(error) };
+    }
+  }
+
+  /** Category visibility is inherited; members can read the panel but not post in it. */
+  private panelOverwrites(guild: Guild, category: CategoryChannel | null): OverwriteResolvable[] {
+    const readOnly =
+      PermissionFlagsBits.SendMessages |
+      PermissionFlagsBits.AddReactions |
+      PermissionFlagsBits.CreatePublicThreads |
+      PermissionFlagsBits.CreatePrivateThreads |
+      PermissionFlagsBits.SendMessagesInThreads;
+    const inherited = category ? this.categoryOverwrites(category).filter((o) => o.type === OverwriteType.Role) : [];
+    const everyone = inherited.find((o) => o.id === guild.roles.everyone.id);
+    const roles = inherited
+      .filter((o) => o.id !== guild.roles.everyone.id)
+      .map((o) => ({ id: o.id, type: OverwriteType.Role, allow: o.allow & ~readOnly, deny: o.deny }));
+    return [
+      ...roles,
+      { id: guild.roles.everyone.id, type: OverwriteType.Role, allow: (everyone?.allow ?? 0n) & ~readOnly, deny: (everyone?.deny ?? 0n) | readOnly },
+      {
+        id: guild.members.me?.id ?? guild.client.user.id,
+        type: OverwriteType.Member,
+        allow:
+          PermissionFlagsBits.ViewChannel | PermissionFlagsBits.SendMessages | PermissionFlagsBits.EmbedLinks | PermissionFlagsBits.ReadMessageHistory,
+      },
+    ];
   }
 
   // ───────────────────────────── room index ─────────────────────────────
@@ -495,6 +583,11 @@ export class TempVoiceService {
       return;
     }
     const config = await this.getConfig(guild.id);
+    if (config?.panelChannelId === channelId) {
+      await this.repo.setPanel(guild.id, null, null);
+      this.configs.set(guild.id, { ...config, panelChannelId: null, panelMessageId: null });
+      return;
+    }
     if (config?.creatorChannelId === channelId) {
       await this.repo.setConfigEnabled(guild.id, false);
       this.configs.set(guild.id, { ...config, enabled: false });
@@ -618,6 +711,8 @@ export class TempVoiceService {
         for (const member of creator.members.values()) {
           if (!member.user.bot) void this.createRoomFor(member, config);
         }
+        // Refresh an existing panel to the current version; never create one implicitly.
+        await this.ensurePanel(guild, config, { create: false });
       }
     }
     return { restored, removed };
