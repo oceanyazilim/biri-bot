@@ -66,12 +66,12 @@ Tüm kullanıcı mesajları Türkçedir. Kod ve teknik dokümantasyon İngilizce
 3. Sol menüden **Bot** sekmesine gidin:
    - **Reset Token** → token'ı kopyalayın → `.env` içindeki `DISCORD_TOKEN`. *Token'ı kimseyle paylaşmayın.*
    - **Privileged Gateway Intents**:
-     - *Message Content Intent*: **kapalı kalsın** (gerekmez).
+     - *Message Content Intent*: `.ban` / `.kick` prefix komutlarını kullanacaksanız **açın** ve `.env` içinde `ENABLE_PREFIX_COMMANDS=true` yapın. Kullanmayacaksanız kapalı kalsın.
      - *Server Members Intent*: isteğe bağlıdır. Açarsanız `.env` içinde `ENABLE_GUILD_MEMBERS_INTENT=true` yapın. Üye katılma/ayrılma logları ve atma (kick) olayları için ek doğrulama sağlar.
      - *Presence Intent*: kapalı kalsın.
    - **Public Bot** seçeneğini, botu yalnızca siz ekleyecekseniz kapatabilirsiniz.
 
-Biri'nin kullandığı Gateway Intent'leri: `Guilds`, `GuildVoiceStates`, `GuildModeration` (denetim kaydı olayları ve yasaklamalar için). `GuildMembers` yalnızca yukarıdaki ayar açıksa kullanılır.
+Biri'nin kullandığı Gateway Intent'leri: `Guilds`, `GuildVoiceStates`, `GuildModeration` (denetim kaydı olayları ve yasaklamalar için). `GuildMembers` ve `GuildMessages` + `MessageContent` yalnızca ilgili ayarlar açıksa kullanılır.
 
 ---
 
@@ -80,10 +80,10 @@ Biri'nin kullandığı Gateway Intent'leri: `Guilds`, `GuildVoiceStates`, `Guild
 Aşağıdaki bağlantıda `CLIENT_ID` yerine uygulama kimliğinizi yazın:
 
 ```
-https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20applications.commands&permissions=286346384
+https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20applications.commands&permissions=286346390
 ```
 
-`286346384` değeri yalnızca gereken izinleri içerir:
+`286346390` değeri yalnızca gereken izinleri içerir:
 
 | İzin | Neden |
 |---|---|
@@ -94,6 +94,7 @@ https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20application
 | Bağlan | Ses kanallarına erişim |
 | Mesaj Gönder, Bağlantı Yerleştir, Mesaj Geçmişini Oku | Log ve bilgilendirme mesajları |
 | Denetim Kaydını Görüntüle | Guard'ın işlemi kimin yaptığını belirlemesi |
+| Üyeleri Yasakla, Üyeleri At | `.ban` ve `.kick` komutları |
 
 > **Yönetici (Administrator) izni vermeyin.** Biri buna ihtiyaç duymaz.
 
@@ -201,6 +202,19 @@ npm run deploy-commands
 | `/guard-iade @kullanici` | Guard yöneticisi | Alınan rolleri onayla geri ver |
 
 **Guard yöneticisi** sunucu sahibi ya da sahibin `/guard-yetkili` ile yetkilendirdiği bir yöneticidir. Sıradan moderatörler güvenilir listeyi değiştiremez. Guard yöneticileri de kendilerini ya da sahip oldukları bir rolü güvenilir listeye ekleyemez.
+
+### Moderasyon (prefix komutları)
+
+`ENABLE_PREFIX_COMMANDS=true` ve Developer Portal'da **Message Content Intent** açık olmalıdır. Prefix `PREFIX` ile değiştirilebilir (varsayılan `.`).
+
+| Komut | Yetki | Açıklama |
+|---|---|---|
+| `.ban <@kullanıcı \| ID> [sebep]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan bir kişi ID ile de yasaklanabilir. |
+| `.kick <@kullanıcı \| ID> [sebep]` | Üyeleri At | Sunucudan atar. |
+
+- Rol hiyerarşisi uygulanır: kendinizle aynı veya daha yüksek roldeki birini, sunucu sahibini ya da kendinizi banlayamazsınız.
+- Hedef kişiye mümkünse sebebi içeren bir DM gönderilir. Denetim kaydına `Yetkili (ID): sebep` yazılır.
+- **Guard koruması:** Ban bot üzerinden yapıldığı için Discord'un denetim kaydında yapan kişi olarak bot görünür. Biri bu yüzden her `.ban`/`.kick` işlemini komutu yazan moderatöre işler. Aktif modda moderatör eşiği aşarsa (varsayılan 15 saniyede 3 ban) son işlem **engellenir** ve moderatörün rolleri alınır.
 
 ### Diğer
 

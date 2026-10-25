@@ -41,6 +41,10 @@ const command: SlashCommand = {
           ].join('\n'),
         },
         {
+          name: '🔨 Moderasyon',
+          value: ['`.ban <@kullanıcı | ID> [sebep]` — Sunucudan yasakla', '`.kick <@kullanıcı | ID> [sebep]` — Sunucudan at'].join('\n'),
+        },
+        {
           name: '⚙️ Kurulum',
           value: [
             '`/auto-setup` — Ses odaları + log kanalları + Guard, tek seferde',

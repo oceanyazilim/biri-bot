@@ -11,6 +11,7 @@ import type { SecurityEventProcessor } from '../modules/guard/SecurityEventProce
 import type { TrustService } from '../modules/guard/TrustService';
 import type { LogChannelService } from '../modules/logging/LogChannelService';
 import type { LogDispatcher } from '../modules/logging/LogDispatcher';
+import type { ModerationService } from '../modules/moderation/ModerationService';
 import type { RoomManager } from '../modules/tempVoice/RoomManager';
 import type { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import type { CooldownService } from '../services/CooldownService';
@@ -44,6 +45,8 @@ export interface App {
   incidents: IncidentManager;
   processor: SecurityEventProcessor;
   reporter: GuardReporter;
+
+  moderation: ModerationService;
 
   commands: Map<string, SlashCommand>;
   components: Map<string, ComponentHandler>;

@@ -13,6 +13,7 @@ import { SecurityEventProcessor } from '../modules/guard/SecurityEventProcessor'
 import { TrustService } from '../modules/guard/TrustService';
 import { LogChannelService } from '../modules/logging/LogChannelService';
 import { LogDispatcher } from '../modules/logging/LogDispatcher';
+import { ModerationService } from '../modules/moderation/ModerationService';
 import { RoomManager } from '../modules/tempVoice/RoomManager';
 import { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import { CooldownService } from '../services/CooldownService';
@@ -21,7 +22,7 @@ import { SelfActionRegistry } from '../services/SelfActionRegistry';
 import type { Logger } from '../utils/logger';
 import type { App } from './App';
 
-export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT'>): GatewayIntentBits[] {
+export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_PREFIX_COMMANDS'>): GatewayIntentBits[] {
   const intents = [
     GatewayIntentBits.Guilds, // channels, roles, guild updates
     GatewayIntentBits.GuildVoiceStates, // join-to-create rooms
@@ -29,6 +30,8 @@ export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT'>): G
   ];
   // Privileged: only requested when explicitly enabled.
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers);
+  // Prefix commands need to read messages; MessageContent is privileged.
+  if (env.ENABLE_PREFIX_COMMANDS) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
   return intents;
 }
 
@@ -73,6 +76,8 @@ export function createApp(env: Env, logger: Logger): App {
   const incidents = new IncidentManager(repos.guard, guardLogger);
   const reporter = new GuardReporter(logDispatcher, repos.guard, guardLogger);
   const processor = new SecurityEventProcessor({ config: guardConfig, trust, repo: repos.guard, incidents, reporter, logger: guardLogger, health });
+  const moderation = new ModerationService(processor, logger.child({ module: 'moderation' }));
+  moderation.setLogSink((guildId, embed) => logDispatcher.enqueue(guildId, 'MEMBER', embed));
   const guard = new GuardService(processor, correlator, guardConfig, repos.guard, logChannels, selfActions, guardLogger);
 
   return {
@@ -95,6 +100,7 @@ export function createApp(env: Env, logger: Logger): App {
     incidents,
     processor,
     reporter,
+    moderation,
     commands: buildCommandMap(),
     components: buildComponentMap(),
   };

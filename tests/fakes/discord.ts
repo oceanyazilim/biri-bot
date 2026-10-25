@@ -282,6 +282,18 @@ export class FakeGuild {
   };
 
   fetchOwner = vi.fn(async () => this.members.cache.get(this.ownerId));
+  bannedIds = new Set<string>();
+  bans = {
+    create: vi.fn(async (userId: string, _options?: { reason?: string }) => {
+      const member = this.members.cache.get(userId);
+      if (member && member.roles.highest.position >= this.members.me.roles.highest.position) {
+        throw new DiscordError(RESTJSONErrorCodes.MissingPermissions);
+      }
+      this.bannedIds.add(userId);
+      this.members.cache.delete(userId);
+      return userId;
+    }),
+  };
   fetchAuditLogs = vi.fn(async ({ type, limit }: { type: number; limit: number }) => ({
     entries: new Collection(
       this.auditLog
@@ -325,7 +337,9 @@ export class FakeGuild {
           PermissionFlagsBits.Connect |
           PermissionFlagsBits.SendMessages |
           PermissionFlagsBits.EmbedLinks |
-          PermissionFlagsBits.ViewAuditLog,
+          PermissionFlagsBits.ViewAuditLog |
+          PermissionFlagsBits.BanMembers |
+          PermissionFlagsBits.KickMembers,
       managed: true,
     });
     me.roles.give(this.botRole);

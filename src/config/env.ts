@@ -31,6 +31,13 @@ const envSchema = z.object({
     .default('true')
     .transform((value) => value === 'true' || value === '1' || value === 'yes'),
 
+  /**
+   * Enables `.ban` / `.kick` style prefix commands. Requires the privileged
+   * Message Content intent to be switched on in the Developer Portal.
+   */
+  ENABLE_PREFIX_COMMANDS: booleanFlag,
+  PREFIX: z.string().min(1).max(5).default('.'),
+
   /** Enables the privileged Server Members intent (member join/leave logs, kick fallback attribution). */
   ENABLE_GUILD_MEMBERS_INTENT: booleanFlag,
 

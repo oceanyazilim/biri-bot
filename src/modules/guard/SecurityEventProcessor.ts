@@ -41,6 +41,17 @@ export interface UnattributedInput {
   occurredAt: Date;
 }
 
+export interface CommandActionInput {
+  module: Extract<GuardModule, 'MEMBER_BAN' | 'MEMBER_KICK'>;
+  command: string;
+  executorId: string;
+  targetId: string;
+  targetName: string | null;
+  reason: string | null;
+  /** Unique per command invocation, e.g. `cmd:<message id>`. */
+  dedupeId: string;
+}
+
 export interface ProcessorDeps {
   config: GuardConfigService;
   trust: TrustService;
@@ -122,6 +133,42 @@ export class SecurityEventProcessor {
       weight: 1,
       occurredAt: input.occurredAt,
       details: { attributionFailure: input.attributionFailure },
+    };
+    return this.handle(guild, event, settings);
+  }
+
+  /**
+   * A moderation action Biri performs on a moderator's behalf (e.g. `.ban`).
+   * Discord's audit log names Biri as the executor, so the moderator who issued
+   * the command is recorded here as the verified executor instead — otherwise
+   * a compromised moderator could mass-ban through the bot unnoticed.
+   */
+  async processCommandAction(guild: Guild, input: CommandActionInput): Promise<ProcessedEvent | null> {
+    let settings: GuardSettings;
+    try {
+      settings = await this.deps.config.get(guild.id);
+    } catch (error) {
+      this.deps.logger.error({ err: error, guildId: guild.id }, 'Guard ayarları okunamadı');
+      return null;
+    }
+    if (!settings.enabled) return null;
+    if (!this.processed.mark(`${guild.id}:${input.dedupeId}`)) return null;
+    const event: NormalizedSecurityEvent = {
+      guildId: guild.id,
+      module: input.module,
+      eventType: input.module,
+      dedupeId: input.dedupeId,
+      auditEntryId: null,
+      executorId: input.executorId,
+      executorVerified: true,
+      attribution: 'BOT_COMMAND',
+      targetId: input.targetId,
+      targetType: 'USER',
+      targetName: input.targetName,
+      baseSeverity: 'LOW',
+      weight: 1,
+      occurredAt: new Date(),
+      details: { viaCommand: input.command, ...(input.reason ? { reason: input.reason } : {}) },
     };
     return this.handle(guild, event, settings);
   }

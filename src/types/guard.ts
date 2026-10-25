@@ -42,7 +42,8 @@ export type ExemptionReason = 'OWNER' | 'TRUSTED_USER' | 'TRUSTED_ROLE' | 'TRUST
 export type TargetType = 'CHANNEL' | 'ROLE' | 'USER' | 'WEBHOOK' | 'GUILD' | 'UNKNOWN';
 
 /** Where the attribution for an event came from. */
-export type AttributionSource = 'GATEWAY_AUDIT' | 'FETCHED_AUDIT' | 'NONE';
+/** BOT_COMMAND: a moderation action Biri performed on behalf of the moderator who issued the command. */
+export type AttributionSource = 'GATEWAY_AUDIT' | 'FETCHED_AUDIT' | 'BOT_COMMAND' | 'NONE';
 
 /**
  * A security-relevant administrative action, normalized from an audit log entry
