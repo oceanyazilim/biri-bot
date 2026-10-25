@@ -100,6 +100,36 @@ describe('.ban / .kick', () => {
   });
 });
 
+describe('.unban', () => {
+  it('lifts an existing ban with an attributable reason', async () => {
+    const h = await modHarness();
+    expect((await h.run('BAN', h.victim.id)).ok).toBe(true);
+    const result = await h.run('UNBAN', h.victim.id, h.moderator, 'itiraz kabul edildi');
+    expect(result.ok).toBe(true);
+    expect(h.guild.bans.remove).toHaveBeenCalledWith(h.victim.id, expect.stringContaining(`(${h.moderator.id}): itiraz kabul edildi`));
+    expect(h.guild.bannedIds.has(h.victim.id)).toBe(false);
+  });
+
+  it('reports users who are not banned', async () => {
+    const h = await modHarness();
+    const result = await h.run('UNBAN', nextSnowflake());
+    expect(result).toMatchObject({ ok: false });
+    expect(result.message).toContain('yasaklı değil');
+  });
+
+  it('requires Ban Members and is not counted by Guard', async () => {
+    const h = await modHarness({ mode: 'ACTIVE' });
+    const regular = h.guild.addMember({ name: 'Sıradan' });
+    expect((await h.run('UNBAN', h.victim.id, regular)).message).toContain('Üyeleri Yasakla');
+
+    const ids = Array.from({ length: 5 }, () => nextSnowflake());
+    for (const id of ids) h.guild.bannedIds.add(id);
+    for (const id of ids) expect((await h.run('UNBAN', id)).ok).toBe(true);
+    expect(h.repos.guard.events).toHaveLength(0);
+    expect(h.repos.guard.incidents).toHaveLength(0);
+  });
+});
+
 describe('Guard sees bot-proxied moderation', () => {
   it('blocks the ban that completes a mass-ban burst and strips the moderator', async () => {
     const h = await modHarness({ mode: 'ACTIVE' });
@@ -178,5 +208,11 @@ describe('prefix message handler', () => {
     expect(unrelated.reply).not.toHaveBeenCalled();
     const chat = await h.send('ban atın şuna');
     expect(chat.reply).not.toHaveBeenCalled();
+  });
+});
+
+describe('.unban via prefix', () => {
+  it('is routed by the prefix handler', () => {
+    expect(parsePrefixCommand('.unban 123456789012345678 itiraz', '.')).toEqual({ name: 'unban', args: ['123456789012345678', 'itiraz'] });
   });
 });

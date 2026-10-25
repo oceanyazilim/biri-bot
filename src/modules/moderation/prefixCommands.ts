@@ -10,6 +10,7 @@ const PREFIX_COOLDOWN_MS = 2_000;
 const COMMANDS: Record<string, { action: ModerationAction; usage: string; title: string }> = {
   ban: { action: 'BAN', usage: 'ban <@kullanıcı | ID> [sebep]', title: '🔨 Yasaklandı' },
   kick: { action: 'KICK', usage: 'kick <@kullanıcı | ID> [sebep]', title: '👢 Atıldı' },
+  unban: { action: 'UNBAN', usage: 'unban <ID> [sebep]', title: '✅ Yasak Kaldırıldı' },
 };
 
 /** Handles `.ban` / `.kick` messages. Unknown prefixed messages are ignored silently. */

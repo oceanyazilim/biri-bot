@@ -42,7 +42,7 @@ const command: SlashCommand = {
         },
         {
           name: '🔨 Moderasyon',
-          value: ['`.ban <@kullanıcı | ID> [sebep]` — Sunucudan yasakla', '`.kick <@kullanıcı | ID> [sebep]` — Sunucudan at'].join('\n'),
+          value: ['`.ban <@kullanıcı | ID> [sebep]` — Sunucudan yasakla', '`.kick <@kullanıcı | ID> [sebep]` — Sunucudan at', '`.unban <ID> [sebep]` — Yasağı kaldır'].join('\n'),
         },
         {
           name: '⚙️ Kurulum',

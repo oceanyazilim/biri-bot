@@ -211,6 +211,7 @@ npm run deploy-commands
 |---|---|---|
 | `.ban <@kullanıcı \| ID> [sebep]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan bir kişi ID ile de yasaklanabilir. |
 | `.kick <@kullanıcı \| ID> [sebep]` | Üyeleri At | Sunucudan atar. |
+| `.unban <ID> [sebep]` | Üyeleri Yasakla | Yasağı kaldırır. Banı kaldırmak saldırı sayılmaz, Guard'a işlenmez; üye log kanalına yazılır. |
 
 - Rol hiyerarşisi uygulanır: kendinizle aynı veya daha yüksek roldeki birini, sunucu sahibini ya da kendinizi banlayamazsınız.
 - Hedef kişiye mümkünse sebebi içeren bir DM gönderilir. Denetim kaydına `Yetkili (ID): sebep` yazılır.

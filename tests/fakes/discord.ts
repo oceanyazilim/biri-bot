@@ -293,6 +293,10 @@ export class FakeGuild {
       this.members.cache.delete(userId);
       return userId;
     }),
+    remove: vi.fn(async (userId: string, _reason?: string) => {
+      if (!this.bannedIds.delete(userId)) throw new DiscordError(RESTJSONErrorCodes.UnknownBan, 'Unknown Ban');
+      return null;
+    }),
   };
   fetchAuditLogs = vi.fn(async ({ type, limit }: { type: number; limit: number }) => ({
     entries: new Collection(

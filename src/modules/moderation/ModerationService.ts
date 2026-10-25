@@ -1,12 +1,12 @@
-import { PermissionFlagsBits, type EmbedBuilder, type Guild, type GuildMember } from 'discord.js';
+import { PermissionFlagsBits, RESTJSONErrorCodes, type EmbedBuilder, type Guild, type GuildMember } from 'discord.js';
 import { COLORS } from '../../config/constants';
-import { describeError } from '../../utils/discordErrors';
+import { describeError, discordErrorCode } from '../../utils/discordErrors';
 import { clip, userMention } from '../../utils/format';
 import type { Logger } from '../../utils/logger';
 import type { SecurityEventProcessor } from '../guard/SecurityEventProcessor';
 import { brandEmbed } from '../logging/embeds';
 
-export type ModerationAction = 'BAN' | 'KICK';
+export type ModerationAction = 'BAN' | 'KICK' | 'UNBAN';
 
 export interface ModerationResult {
   ok: boolean;
@@ -24,7 +24,7 @@ interface ActionSpec {
   emoji: string;
 }
 
-const ACTIONS: Record<ModerationAction, ActionSpec> = {
+const ACTIONS: Record<Exclude<ModerationAction, 'UNBAN'>, ActionSpec> = {
   BAN: { permission: PermissionFlagsBits.BanMembers, permissionLabel: 'Üyeleri Yasakla', module: 'MEMBER_BAN', verb: 'yasaklayamazsın', past: 'sunucudan yasaklandı', emoji: '🔨' },
   KICK: { permission: PermissionFlagsBits.KickMembers, permissionLabel: 'Üyeleri At', module: 'MEMBER_KICK', verb: 'atamazsın', past: 'sunucudan atıldı', emoji: '👢' },
 };
@@ -62,6 +62,7 @@ export class ModerationService {
 
   async execute(request: ModerationRequest): Promise<ModerationResult> {
     const { action, guild, moderator, targetId } = request;
+    if (action === 'UNBAN') return this.unban(request);
     const spec = ACTIONS[action];
     const me = guild.members.me;
 
@@ -127,6 +128,31 @@ export class ModerationService {
       brandEmbed(action === 'BAN' ? COLORS.critical : COLORS.warning)
         .setTitle(action === 'BAN' ? '🔨 Üye Yasaklandı' : '👢 Üye Atıldı')
         .setDescription(`${text}\n**Kullanıcı ID:** \`${targetId}\``),
+    );
+    return { ok: true, message: text };
+  }
+
+  /** Lifting a ban is not a destructive action, so it is logged but not counted by Guard. */
+  private async unban(request: ModerationRequest): Promise<ModerationResult> {
+    const { guild, moderator, targetId } = request;
+    if (!moderator.permissions.has(PermissionFlagsBits.BanMembers)) return fail('Bu komut için **Üyeleri Yasakla** yetkin yok.');
+    if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) return fail("Biri'nin **Üyeleri Yasakla** yetkisi yok.");
+
+    const reasonText = request.reason?.trim() || null;
+    try {
+      await guild.bans.remove(targetId, clip(`${moderator.user.tag} (${moderator.id}): ${reasonText ?? 'Sebep belirtilmedi'}`, 512));
+    } catch (error) {
+      if (discordErrorCode(error) === RESTJSONErrorCodes.UnknownBan) return fail(`${userMention(targetId)} (\`${targetId}\`) yasaklı değil.`);
+      return fail(`İşlem başarısız: ${describeError(error)}`);
+    }
+
+    const text = `✅ ${userMention(targetId)} kullanıcısının yasağı kaldırıldı.
+**Yetkili:** ${userMention(moderator.id)}
+**Sebep:** ${reasonText ?? 'Belirtilmedi'}`;
+    this.logSink?.(
+      guild.id,
+      brandEmbed(COLORS.success).setTitle('✅ Yasak Kaldırıldı').setDescription(`${text}
+**Kullanıcı ID:** \`${targetId}\``),
     );
     return { ok: true, message: text };
   }
