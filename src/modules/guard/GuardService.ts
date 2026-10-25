@@ -47,6 +47,8 @@ export function auditSource(guild: Guild): AuditLogSource {
  * matching entry did not arrive.
  */
 export class GuardService {
+  private onFetchedEntry: ((guild: Guild, entry: AuditEntryLike) => Promise<unknown>) | null = null;
+
   constructor(
     private readonly processor: SecurityEventProcessor,
     private readonly correlator: AuditLogCorrelator,
@@ -57,6 +59,11 @@ export class GuardService {
     private readonly logger: Logger,
     private readonly sourceFor: (guild: Guild) => AuditLogSource = auditSource,
   ) {}
+
+  /** Called for audit entries that were only obtained through a fallback fetch. */
+  setFetchedEntryListener(listener: (guild: Guild, entry: AuditEntryLike) => Promise<unknown>): void {
+    this.onFetchedEntry = listener;
+  }
 
   async onAuditLogEntry(guild: Guild, entry: GuildAuditLogsEntry): Promise<void> {
     const like = entry as unknown as AuditEntryLike;
@@ -141,6 +148,8 @@ export class GuardService {
 
     const result = await this.correlator.correlate(this.sourceFor(guild), action, targetId, observedAt);
     if (result.status === 'MATCHED') {
+      // The gateway never delivered this entry, so the audit feed has not logged it yet.
+      if (result.source === 'FETCHED_AUDIT') await this.onFetchedEntry?.(guild, result.entry);
       await this.processor.processAuditEntry(guild, result.entry, result.source);
       return;
     }

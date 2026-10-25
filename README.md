@@ -47,7 +47,24 @@ Tüm kullanıcı mesajları Türkçedir. Kod ve teknik dokümantasyon İngilizce
 - Üç koruma modu: **İzleme**, **Uyarı**, **Aktif**. Aktif mod yalnızca onaylı bir komutla açılır.
 - Güvenilir kullanıcı, rol ve bot listesi. Sunucu sahibi kalıcı olarak muaftır.
 - Rol alınmadan önce rol listesinin anlık görüntüsü kaydedilir. `/guard-iade` ile onaylı iade yapılır; yetkili roller için ayrıca onay istenir.
-- Korumalı log kategorisi ve 8 log kanalı oluşturur. Silinen log kanalları, döngü korumasıyla yeniden oluşturulur.
+- Korumalı log kategorisi ve 9 log kanalı oluşturur. Silinen log kanalları, döngü korumasıyla yeniden oluşturulur.
+- Guard'dan bağımsız **ayrıntılı loglar**: denetim kaydındaki her yönetim işlemi kim yaptı, neyi değiştirdi (önce → sonra), hangi izinler verildi/alındı ve sebep bilgisiyle Türkçe olarak ilgili kanala yazılır.
+
+### Log kanalları
+
+| Kanal | İçerik | Gereksinim |
+|---|---|---|
+| 📋・biri-genel-log | Sunucu ayarları, davetler, emoji/çıkartma, entegrasyon, etkinlik, AutoMod kuralları | — |
+| 🚨・biri-guard-log | Guard uyarıları ve olay raporları | — |
+| 🗑️・biri-kanal-log | Kanal/alt başlık oluşturma, düzenleme (ad, konu, yavaş mod…), silme, kanal izinleri | — |
+| 🎭・biri-rol-log | Rol oluşturma/düzenleme/silme (eklenen/kaldırılan izinler), üyelere verilen/alınan roller | — |
+| 👤・biri-uye-log | Ban, unban, kick, prune, zaman aşımı, takma ad, bot ekleme; katılma/ayrılma | Katılma/ayrılma için `ENABLE_GUILD_MEMBERS_INTENT=true` |
+| 🔊・biri-ses-log | Ses kanalına giriş/çıkış/geçiş, yetkili taşımaları, geçici oda işlemleri | — |
+| 💬・biri-mesaj-log | Silinen/düzenlenen mesajlar (içerikle), toplu silme, yetkili mesaj silmeleri, sabitlemeler | Mesaj içeriği için `ENABLE_MESSAGE_LOGS=true` |
+| 🔗・biri-webhook-log | Webhook oluşturma/düzenleme/silme | — |
+| ⚙️・biri-sistem-log | Biri yapılandırma değişiklikleri, log kurtarma | — |
+
+Biri'nin kendi işlemleri (oda açma/kapama, `.ban` vb.) tekrar loglanmaz; ilgili özelliğin kendi kaydında görünür. Mevcut kurulumlarda yeni kanal için `/auto-setup` komutunu tekrar çalıştırın.
 - Tüm olaylar veritabanında saklanır. Discord'a gönderim başarısız olsa bile kayıt kaybolmaz.
 
 ---

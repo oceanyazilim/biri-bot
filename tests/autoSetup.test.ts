@@ -36,7 +36,7 @@ describe('/auto-setup', () => {
     expect(h.guild.channels.cache.get(voiceResult.config.categoryId)?.name).toBe('🔊 BİRİ SES ODALARI');
 
     expect(guardResult.logs.failed).toHaveLength(0);
-    expect(guardResult.logs.created).toHaveLength(9); // category + 8 channels
+    expect(guardResult.logs.created).toHaveLength(10); // category + 9 channels
     expect(names(h)).toEqual(
       expect.arrayContaining(['🛡️ BİRİ・GÜVENLİK', '🚨・biri-guard-log', '🔊・biri-ses-log', '⚙️・biri-sistem-log']),
     );

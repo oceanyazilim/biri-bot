@@ -167,7 +167,9 @@ export class GuardReporter {
   /** Routine event log + (rate-limited) guard alert for high-risk events. */
   reportEvent(guild: Guild, report: EventReport): void {
     const embed = this.eventEmbed(report);
-    this.dispatcher.enqueue(guild.id, MODULE_LOG_CHANNEL[report.event.module], embed);
+    // Audit-attributed actions are already written to their log channel by the
+    // audit feed; only events without an audit entry are logged here.
+    if (report.event.attribution === 'NONE') this.dispatcher.enqueue(guild.id, MODULE_LOG_CHANNEL[report.event.module], embed);
     if (!report.decision.notify || report.decision.openIncident) return;
     const key = `${guild.id}:${report.event.executorId ?? 'unknown'}:${report.event.module}`;
     if (this.alertCooldown.has(key)) return;
@@ -241,7 +243,6 @@ export class GuardReporter {
       content,
       allowedMentions: { users: mentionOwner ? [guild.ownerId] : [], roles: mentionRoles },
     });
-    this.dispatcher.enqueue(guild.id, MODULE_LOG_CHANNEL[report.event.module], this.eventEmbed(report));
 
     if (report.settings.notifyOwner && report.decision.notify && severityRank(report.severity) >= severityRank('CRITICAL')) {
       try {

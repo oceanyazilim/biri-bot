@@ -9,6 +9,8 @@ import type { GuardReporter } from '../modules/guard/GuardReporter';
 import type { GuardService } from '../modules/guard/GuardService';
 import type { SecurityEventProcessor } from '../modules/guard/SecurityEventProcessor';
 import type { TrustService } from '../modules/guard/TrustService';
+import type { ActivityLogger } from '../modules/logging/ActivityLogger';
+import type { AuditLogFeed } from '../modules/logging/AuditLogFeed';
 import type { LogChannelService } from '../modules/logging/LogChannelService';
 import type { LogDispatcher } from '../modules/logging/LogDispatcher';
 import type { ModerationService } from '../modules/moderation/ModerationService';
@@ -34,6 +36,8 @@ export interface App {
 
   logChannels: LogChannelService;
   logDispatcher: LogDispatcher;
+  auditFeed: AuditLogFeed;
+  activity: ActivityLogger;
 
   tempVoice: TempVoiceService;
   rooms: RoomManager;

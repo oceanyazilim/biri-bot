@@ -110,7 +110,7 @@ export const PRIVILEGED_ROLE_MASK =
   PermissionFlagsBits.BanMembers |
   PermissionFlagsBits.KickMembers;
 
-export const LOG_CHANNEL_KINDS = ['GENERAL', 'GUARD', 'CHANNEL', 'ROLE', 'MEMBER', 'VOICE', 'WEBHOOK', 'SYSTEM'] as const;
+export const LOG_CHANNEL_KINDS = ['GENERAL', 'GUARD', 'CHANNEL', 'ROLE', 'MEMBER', 'VOICE', 'MESSAGE', 'WEBHOOK', 'SYSTEM'] as const;
 export type LogChannelKind = (typeof LOG_CHANNEL_KINDS)[number];
 export type LogStructureKind = LogChannelKind | 'CATEGORY';
 
@@ -123,17 +123,19 @@ export const LOG_CHANNEL_NAMES: Record<LogChannelKind, string> = {
   ROLE: '🎭・biri-rol-log',
   MEMBER: '👤・biri-uye-log',
   VOICE: '🔊・biri-ses-log',
+  MESSAGE: '💬・biri-mesaj-log',
   WEBHOOK: '🔗・biri-webhook-log',
   SYSTEM: '⚙️・biri-sistem-log',
 };
 
 export const LOG_CHANNEL_TOPICS: Record<LogChannelKind, string> = {
-  GENERAL: 'Biri genel olay kayıtları',
+  GENERAL: 'Sunucu ayarları, davetler, emoji/çıkartma, entegrasyon ve etkinlik kayıtları',
   GUARD: 'Biri Guard kritik güvenlik olayları ve müdahaleler',
-  CHANNEL: 'Kanal oluşturma, silme ve izin değişiklikleri',
-  ROLE: 'Rol oluşturma, silme ve yetki değişiklikleri',
-  MEMBER: 'Yasaklama, atma ve bot ekleme kayıtları',
-  VOICE: 'Geçici ses odası işlemleri',
+  CHANNEL: 'Kanal ve alt başlık oluşturma, düzenleme, silme ve izin değişiklikleri',
+  ROLE: 'Rol oluşturma, düzenleme, silme ve üyelere verilen/alınan roller',
+  MEMBER: 'Katılma/ayrılma, yasaklama, atma, zaman aşımı, takma ad ve bot ekleme kayıtları',
+  VOICE: 'Ses kanalı giriş/çıkışları, taşımalar ve geçici oda işlemleri',
+  MESSAGE: 'Silinen ve düzenlenen mesajlar, toplu silmeler, sabitlemeler',
   WEBHOOK: 'Webhook oluşturma, düzenleme ve silme kayıtları',
   SYSTEM: 'Biri sistem, yapılandırma ve kurtarma kayıtları',
 };

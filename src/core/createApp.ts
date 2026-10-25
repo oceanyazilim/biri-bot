@@ -11,6 +11,8 @@ import { GuardReporter } from '../modules/guard/GuardReporter';
 import { GuardService } from '../modules/guard/GuardService';
 import { SecurityEventProcessor } from '../modules/guard/SecurityEventProcessor';
 import { TrustService } from '../modules/guard/TrustService';
+import { ActivityLogger } from '../modules/logging/ActivityLogger';
+import { AuditLogFeed } from '../modules/logging/AuditLogFeed';
 import { LogChannelService } from '../modules/logging/LogChannelService';
 import { LogDispatcher } from '../modules/logging/LogDispatcher';
 import { ModerationService } from '../modules/moderation/ModerationService';
@@ -22,7 +24,7 @@ import { SelfActionRegistry } from '../services/SelfActionRegistry';
 import type { Logger } from '../utils/logger';
 import type { App } from './App';
 
-export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_PREFIX_COMMANDS'>): GatewayIntentBits[] {
+export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_PREFIX_COMMANDS' | 'ENABLE_MESSAGE_LOGS'>): GatewayIntentBits[] {
   const intents = [
     GatewayIntentBits.Guilds, // channels, roles, guild updates
     GatewayIntentBits.GuildVoiceStates, // join-to-create rooms
@@ -31,7 +33,7 @@ export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'E
   // Privileged: only requested when explicitly enabled.
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers);
   // Prefix commands need to read messages; MessageContent is privileged.
-  if (env.ENABLE_PREFIX_COMMANDS) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+  if (env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MESSAGE_LOGS) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
   return intents;
 }
 
@@ -42,7 +44,8 @@ export function createApp(env: Env, logger: Logger): App {
     partials: [Partials.GuildMember, Partials.User],
     makeCache: Options.cacheWithLimits({
       ...Options.DefaultMakeCacheSettings,
-      MessageManager: 0,
+      // Message logs need recent messages cached to show deleted/edited content.
+      MessageManager: env.ENABLE_MESSAGE_LOGS ? 200 : 0,
       ReactionManager: 0,
       PresenceManager: 0,
       GuildStickerManager: 0,
@@ -60,6 +63,8 @@ export function createApp(env: Env, logger: Logger): App {
   const logChannels = new LogChannelService(repos.logChannels, repos.guard, selfActions, logger.child({ module: 'logs' }));
   const logDispatcher = new LogDispatcher(client, logChannels, logger.child({ module: 'dispatcher' }), env.LOG_FLUSH_INTERVAL_MS);
   logChannels.attachDispatcher(logDispatcher);
+  const auditFeed = new AuditLogFeed(logDispatcher, logChannels, logger.child({ module: 'auditFeed' }));
+  const activity = new ActivityLogger(logDispatcher, logChannels, logger.child({ module: 'activity' }));
 
   const tempVoice = new TempVoiceService(repos.tempVoice, selfActions, logger.child({ module: 'tempVoice' }), {
     creationConcurrency: env.ROOM_CREATION_CONCURRENCY,
@@ -79,6 +84,7 @@ export function createApp(env: Env, logger: Logger): App {
   const moderation = new ModerationService(processor, logger.child({ module: 'moderation' }));
   moderation.setLogSink((guildId, embed) => logDispatcher.enqueue(guildId, 'MEMBER', embed));
   const guard = new GuardService(processor, correlator, guardConfig, repos.guard, logChannels, selfActions, guardLogger);
+  guard.setFetchedEntryListener((guild, entry) => auditFeed.handle(guild, entry));
 
   return {
     client,
@@ -91,6 +97,8 @@ export function createApp(env: Env, logger: Logger): App {
     health,
     logChannels,
     logDispatcher,
+    auditFeed,
+    activity,
     tempVoice,
     rooms,
     guard,

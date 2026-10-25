@@ -37,6 +37,8 @@ const envSchema = z.object({
    */
   ENABLE_PREFIX_COMMANDS: booleanFlag,
   PREFIX: z.string().min(1).max(5).default('.'),
+  /** Logs deleted/edited messages. Requires the Message Content intent like prefix commands. */
+  ENABLE_MESSAGE_LOGS: booleanFlag,
 
   /** Enables the privileged Server Members intent (member join/leave logs, kick fallback attribution). */
   ENABLE_GUILD_MEMBERS_INTENT: booleanFlag,

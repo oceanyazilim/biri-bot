@@ -1,7 +1,4 @@
 import { Events } from 'discord.js';
-import { COLORS } from '../../config/constants';
-import { brandEmbed } from '../../modules/logging/embeds';
-import { userMention } from '../../utils/format';
 import { defineEvent } from '../types';
 
 export const guildBanAdd = defineEvent({
@@ -15,6 +12,7 @@ export const guildBanAdd = defineEvent({
 export const guildMemberRemove = defineEvent({
   name: Events.GuildMemberRemove,
   async execute(app, member) {
+    await app.activity.memberLeave(member);
     await app.guard.onMemberRemove(member);
   },
 });
@@ -23,14 +21,6 @@ export const guildMemberRemove = defineEvent({
 export const guildMemberAdd = defineEvent({
   name: Events.GuildMemberAdd,
   async execute(app, member) {
-    if (!member.user.bot) return;
-    const trusted = await app.trust.isTrustedBot(member.guild.id, member.id).catch(() => false);
-    app.logDispatcher.enqueue(
-      member.guild.id,
-      'MEMBER',
-      brandEmbed(trusted ? COLORS.info : COLORS.warning)
-        .setTitle(trusted ? '🤖 Güvenilir Bot Katıldı' : '🤖 Bilinmeyen Bot Katıldı')
-        .setDescription(`${userMention(member.id)} (\`${member.user.tag}\`) sunucuya eklendi.`),
-    );
+    await app.activity.memberJoin(member);
   },
 });
