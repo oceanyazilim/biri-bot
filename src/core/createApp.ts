@@ -24,7 +24,7 @@ import { SelfActionRegistry } from '../services/SelfActionRegistry';
 import type { Logger } from '../utils/logger';
 import type { App } from './App';
 
-export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_PREFIX_COMMANDS' | 'ENABLE_MESSAGE_LOGS'>): GatewayIntentBits[] {
+export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_MESSAGE_LOGS'>): GatewayIntentBits[] {
   const intents = [
     GatewayIntentBits.Guilds, // channels, roles, guild updates
     GatewayIntentBits.GuildVoiceStates, // join-to-create rooms
@@ -32,8 +32,8 @@ export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'E
   ];
   // Privileged: only requested when explicitly enabled.
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers);
-  // Prefix commands need to read messages; MessageContent is privileged.
-  if (env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MESSAGE_LOGS) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+  // Message logs need to read message content; MessageContent is privileged.
+  if (env.ENABLE_MESSAGE_LOGS) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
   return intents;
 }
 

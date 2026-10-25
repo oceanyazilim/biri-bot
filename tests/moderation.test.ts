@@ -1,10 +1,10 @@
-import { PermissionFlagsBits, type GuildMember, type Message } from 'discord.js';
+import { Collection, PermissionFlagsBits, type AutocompleteInteraction, type ChatInputCommandInteraction, type GuildMember } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { App } from '../src/core/App';
 import { ModerationService, type ModerationAction } from '../src/modules/moderation/ModerationService';
-import { handlePrefixMessage } from '../src/modules/moderation/prefixCommands';
-import { parsePrefixCommand, parseUserId } from '../src/modules/moderation/prefixParser';
-import { CooldownService } from '../src/services/CooldownService';
+import banCommand from '../src/commands/moderation/ban';
+import kickCommand from '../src/commands/moderation/kick';
+import unbanCommand, { forgetBans } from '../src/commands/moderation/unban';
 import { createSilentLogger } from '../src/utils/logger';
 import { asDiscord, BOT_ID, nextSnowflake, type FakeMember } from './fakes/discord';
 import { createGuardHarness, type GuardHarnessOptions } from './fakes/guardHarness';
@@ -20,29 +20,12 @@ async function modHarness(options: GuardHarnessOptions = {}) {
   return { ...h, moderation, modRole, moderator, victim, run };
 }
 
-describe('prefix parsing', () => {
-  it('parses commands and arguments', () => {
-    expect(parsePrefixCommand('.ban <@123456789012345678> spam yapıyor', '.')).toEqual({ name: 'ban', args: ['<@123456789012345678>', 'spam', 'yapıyor'] });
-    expect(parsePrefixCommand('.KICK 123', '.')?.name).toBe('kick');
-    expect(parsePrefixCommand('merhaba', '.')).toBeNull();
-    expect(parsePrefixCommand('.', '.')).toBeNull();
-  });
-
-  it('accepts mentions and raw ids only', () => {
-    expect(parseUserId('<@123456789012345678>')).toBe('123456789012345678');
-    expect(parseUserId('<@!123456789012345678>')).toBe('123456789012345678');
-    expect(parseUserId('123456789012345678')).toBe('123456789012345678');
-    expect(parseUserId('@kullanici')).toBeNull();
-    expect(parseUserId(undefined)).toBeNull();
-  });
-});
-
-describe('.ban / .kick', () => {
+describe('ban / kick', () => {
   it('bans a member with an attributable audit reason', async () => {
     const h = await modHarness();
     const result = await h.run('BAN', h.victim.id);
     expect(result.ok).toBe(true);
-    expect(h.guild.bans.create).toHaveBeenCalledWith(h.victim.id, { reason: expect.stringContaining(`Moderatör#0 (${h.moderator.id}): kural ihlali`) });
+    expect(h.guild.bans.create).toHaveBeenCalledWith(h.victim.id, { reason: expect.stringContaining(`Moderatör#0 (${h.moderator.id}): kural ihlali`), deleteMessageSeconds: 0 });
     expect(h.victim.send).toHaveBeenCalled();
   });
 
@@ -100,7 +83,7 @@ describe('.ban / .kick', () => {
   });
 });
 
-describe('.unban', () => {
+describe('unban', () => {
   it('lifts an existing ban with an attributable reason', async () => {
     const h = await modHarness();
     expect((await h.run('BAN', h.victim.id)).ok).toBe(true);
@@ -164,55 +147,89 @@ describe('Guard sees bot-proxied moderation', () => {
   });
 });
 
-describe('prefix message handler', () => {
-  async function messageHarness() {
+describe('slash commands', () => {
+  async function slashHarness() {
     const h = await modHarness();
-    h.guild.botRole.permissions.bitfield |= PermissionFlagsBits.BanMembers;
-    const record = vi.fn(async () => undefined);
-    const app = asDiscord<App>({
-      env: { PREFIX: '.' },
-      cooldowns: new CooldownService(),
-      moderation: h.moderation,
-      repos: { commandAudit: { record } },
-      logger: createSilentLogger(),
-    });
-    const send = async (content: string) => {
-      const message = {
+    const app = asDiscord<App>({ moderation: h.moderation });
+    const invoke = async (command: typeof banCommand, options: Record<string, unknown>) => {
+      const interaction = {
         id: nextSnowflake(),
-        content,
-        author: { id: h.moderator.id, bot: false },
-        member: h.moderator,
         guild: h.guild,
         guildId: h.guild.id,
+        member: h.moderator,
+        deferReply: vi.fn(async () => undefined),
+        editReply: vi.fn(async () => undefined),
         reply: vi.fn(async () => undefined),
+        deferred: false,
+        replied: false,
+        options: {
+          getUser: (name: string) => (options[name] ? { id: options[name] } : null),
+          getString: (name: string) => (options[name] as string | undefined) ?? null,
+          getInteger: (name: string) => (options[name] as number | undefined) ?? null,
+        },
       };
-      await handlePrefixMessage(app, asDiscord<Message<true>>(message));
-      return message;
+      let thrown: unknown = null;
+      await command.execute(asDiscord<ChatInputCommandInteraction<'cached'>>(interaction), app).catch((error: unknown) => {
+        thrown = error;
+      });
+      return { interaction, thrown, text: JSON.stringify(interaction.editReply.mock.calls) };
     };
-    return { ...h, send, record };
+    return { ...h, invoke };
   }
 
-  it('runs .ban with a mention and records the command', async () => {
-    const h = await messageHarness();
-    const message = await h.send(`.ban <@${h.victim.id}> reklam yapıyor`);
-    expect(h.guild.bans.create).toHaveBeenCalledWith(h.victim.id, { reason: expect.stringContaining('reklam yapıyor') });
-    expect(message.reply).toHaveBeenCalledTimes(1);
-    expect(h.record).toHaveBeenCalledWith(expect.objectContaining({ command: '.ban', success: true }));
+  it('are registered with permission-gated menus', () => {
+    const json = [banCommand, kickCommand, unbanCommand].map((c) => c.data.toJSON());
+    expect(json.map((c) => c.name)).toEqual(['ban', 'kick', 'unban']);
+    expect(json[0]!.default_member_permissions).toBe(PermissionFlagsBits.BanMembers.toString());
+    expect(json[1]!.default_member_permissions).toBe(PermissionFlagsBits.KickMembers.toString());
+    expect(JSON.stringify(json[0])).toContain('mesaj-sil');
+    expect(JSON.stringify(json[2])).toContain('"autocomplete":true');
   });
 
-  it('shows usage for a missing target and ignores unrelated messages', async () => {
-    const h = await messageHarness();
-    const usage = await h.send('.kick');
-    expect(JSON.stringify((usage.reply.mock.calls[0] as unknown[])[0])).toContain('Kullanım');
-    const unrelated = await h.send('.selam herkese');
-    expect(unrelated.reply).not.toHaveBeenCalled();
-    const chat = await h.send('ban atın şuna');
-    expect(chat.reply).not.toHaveBeenCalled();
+  it('/ban bans privately and passes the message deletion window', async () => {
+    const h = await slashHarness();
+    const { interaction, thrown, text } = await h.invoke(banCommand, { kullanici: h.victim.id, sebep: 'reklam', 'mesaj-sil': 86_400 });
+    expect(thrown).toBeNull();
+    expect(interaction.deferReply).toHaveBeenCalledWith({ flags: 64 });
+    expect(h.guild.bans.create).toHaveBeenCalledWith(h.victim.id, { reason: expect.stringContaining('reklam'), deleteMessageSeconds: 86_400 });
+    expect(text).toContain('Yasaklandı');
   });
-});
 
-describe('.unban via prefix', () => {
-  it('is routed by the prefix handler', () => {
-    expect(parsePrefixCommand('.unban 123456789012345678 itiraz', '.')).toEqual({ name: 'unban', args: ['123456789012345678', 'itiraz'] });
+  it('/kick explains refusals and marks them as handled', async () => {
+    const h = await slashHarness();
+    const { thrown, text } = await h.invoke(kickCommand, { kullanici: h.guild.ownerId });
+    expect(text).toContain('Sunucu sahibini');
+    expect(thrown).toMatchObject({ handled: true });
+  });
+
+  it('/unban accepts an id or mention and rejects free text', async () => {
+    const h = await slashHarness();
+    h.guild.bannedIds.add(h.victim.id);
+    expect((await h.invoke(unbanCommand, { kullanici: `<@${h.victim.id}>` })).text).toContain('Yasak Kaldırıldı');
+    const bad = await h.invoke(unbanCommand, { kullanici: 'birisi' });
+    expect(bad.interaction.reply).toHaveBeenCalled();
+    expect(h.guild.bans.remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('/unban autocompletes from the ban list', async () => {
+    const h = await modHarness();
+    const bans = new Collection([
+      ['300000000000000001', { user: { id: '300000000000000001', tag: 'Spammer#0' }, reason: 'reklam' }],
+      ['300000000000000002', { user: { id: '300000000000000002', tag: 'Troll#0' }, reason: null }],
+    ]);
+    const guild = { id: nextSnowflake(), bans: { fetch: vi.fn(async () => bans) } };
+    const respond = vi.fn(async () => undefined);
+    const ask = (focused: string) =>
+      unbanCommand.autocomplete!(asDiscord<AutocompleteInteraction<'cached'>>({ guild, options: { getFocused: () => focused }, respond }), asDiscord<App>({}));
+
+    await ask('troll');
+    expect(respond).toHaveBeenLastCalledWith([{ name: 'Troll#0 (300000000000000002)', value: '300000000000000002' }]);
+    await ask('');
+    expect((respond.mock.calls.at(-1) as unknown[])[0]).toHaveLength(2);
+    expect(guild.bans.fetch).toHaveBeenCalledTimes(1); // cached between keystrokes
+    forgetBans(guild.id);
+    await ask('spam');
+    expect(guild.bans.fetch).toHaveBeenCalledTimes(2);
+    void h;
   });
 });

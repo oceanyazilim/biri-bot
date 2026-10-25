@@ -64,7 +64,7 @@ Tüm kullanıcı mesajları Türkçedir. Kod ve teknik dokümantasyon İngilizce
 | 🔗・biri-webhook-log | Webhook oluşturma/düzenleme/silme | — |
 | ⚙️・biri-sistem-log | Biri yapılandırma değişiklikleri, log kurtarma | — |
 
-Biri'nin kendi işlemleri (oda açma/kapama, `.ban` vb.) tekrar loglanmaz; ilgili özelliğin kendi kaydında görünür. Mevcut kurulumlarda yeni kanal için `/auto-setup` komutunu tekrar çalıştırın.
+Biri'nin kendi işlemleri (oda açma/kapama, `/ban` vb.) tekrar loglanmaz; ilgili özelliğin kendi kaydında görünür. Mevcut kurulumlarda yeni kanal için `/auto-setup` komutunu tekrar çalıştırın.
 - Tüm olaylar veritabanında saklanır. Discord'a gönderim başarısız olsa bile kayıt kaybolmaz.
 
 ---
@@ -84,7 +84,7 @@ Biri'nin kendi işlemleri (oda açma/kapama, `.ban` vb.) tekrar loglanmaz; ilgil
 3. Sol menüden **Bot** sekmesine gidin:
    - **Reset Token** → token'ı kopyalayın → `.env` içindeki `DISCORD_TOKEN`. *Token'ı kimseyle paylaşmayın.*
    - **Privileged Gateway Intents**:
-     - *Message Content Intent*: `.ban` / `.kick` prefix komutlarını kullanacaksanız **açın** ve `.env` içinde `ENABLE_PREFIX_COMMANDS=true` yapın. Kullanmayacaksanız kapalı kalsın.
+     - *Message Content Intent*: silinen/düzenlenen mesaj loglarını istiyorsanız **açın** ve `ENABLE_MESSAGE_LOGS=true` yapın. İstemiyorsanız kapalı kalsın.
      - *Server Members Intent*: isteğe bağlıdır. Açarsanız `.env` içinde `ENABLE_GUILD_MEMBERS_INTENT=true` yapın. Üye katılma/ayrılma logları ve atma (kick) olayları için ek doğrulama sağlar.
      - *Presence Intent*: kapalı kalsın.
    - **Public Bot** seçeneğini, botu yalnızca siz ekleyecekseniz kapatabilirsiniz.
@@ -112,7 +112,7 @@ https://discord.com/oauth2/authorize?client_id=CLIENT_ID&scope=bot%20application
 | Bağlan | Ses kanallarına erişim |
 | Mesaj Gönder, Bağlantı Yerleştir, Mesaj Geçmişini Oku | Log ve bilgilendirme mesajları |
 | Denetim Kaydını Görüntüle | Guard'ın işlemi kimin yaptığını belirlemesi |
-| Üyeleri Yasakla, Üyeleri At | `.ban` ve `.kick` komutları |
+| Üyeleri Yasakla, Üyeleri At | `/ban`, `/kick`, `/unban` komutları |
 
 > **Yönetici (Administrator) izni vermeyin.** Biri buna ihtiyaç duymaz.
 
@@ -221,19 +221,19 @@ npm run deploy-commands
 
 **Guard yöneticisi** sunucu sahibi ya da sahibin `/guard-yetkili` ile yetkilendirdiği bir yöneticidir. Sıradan moderatörler güvenilir listeyi değiştiremez. Guard yöneticileri de kendilerini ya da sahip oldukları bir rolü güvenilir listeye ekleyemez.
 
-### Moderasyon (prefix komutları)
+### Moderasyon
 
-`ENABLE_PREFIX_COMMANDS=true` ve Developer Portal'da **Message Content Intent** açık olmalıdır. Prefix `PREFIX` ile değiştirilebilir (varsayılan `.`).
+Komutlar yalnızca ilgili yetkiye sahip üyelerin `/` menüsünde görünür.
 
 | Komut | Yetki | Açıklama |
 |---|---|---|
-| `.ban <@kullanıcı \| ID> [sebep]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan bir kişi ID ile de yasaklanabilir. |
-| `.kick <@kullanıcı \| ID> [sebep]` | Üyeleri At | Sunucudan atar. |
-| `.unban <ID> [sebep]` | Üyeleri Yasakla | Yasağı kaldırır. Banı kaldırmak saldırı sayılmaz, Guard'a işlenmez; üye log kanalına yazılır. |
+| `/ban kullanici [sebep] [mesaj-sil]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan biri de ID ile seçilebilir. `mesaj-sil`: son 1 saat – 7 güne kadar mesajlarını da siler. |
+| `/kick kullanici [sebep]` | Üyeleri At | Sunucudan atar. |
+| `/unban kullanici [sebep]` | Üyeleri Yasakla | Yasağı kaldırır. Yazmaya başlayınca yasaklılar listesi açılır. Banı kaldırmak saldırı sayılmaz, Guard'a işlenmez. |
 
 - Rol hiyerarşisi uygulanır: kendinizle aynı veya daha yüksek roldeki birini, sunucu sahibini ya da kendinizi banlayamazsınız.
 - Hedef kişiye mümkünse sebebi içeren bir DM gönderilir. Denetim kaydına `Yetkili (ID): sebep` yazılır.
-- **Guard koruması:** Ban bot üzerinden yapıldığı için Discord'un denetim kaydında yapan kişi olarak bot görünür. Biri bu yüzden her `.ban`/`.kick` işlemini komutu yazan moderatöre işler. Aktif modda moderatör eşiği aşarsa (varsayılan 15 saniyede 3 ban) son işlem **engellenir** ve moderatörün rolleri alınır.
+- **Guard koruması:** Ban bot üzerinden yapıldığı için Discord'un denetim kaydında yapan kişi olarak bot görünür. Biri bu yüzden her `/ban`/`/kick` işlemini komutu yazan moderatöre işler. Aktif modda moderatör eşiği aşarsa (varsayılan 15 saniyede 3 ban) son işlem **engellenir** ve moderatörün rolleri alınır.
 
 ### Diğer
 

@@ -2,6 +2,9 @@ import type { SlashCommand } from '../types/command';
 import autoSetup from './admin/auto-setup';
 import kur from './admin/kur';
 import yardim from './admin/yardim';
+import ban from './moderation/ban';
+import kick from './moderation/kick';
+import unban from './moderation/unban';
 import guardAc from './guard/guard-ac';
 import guardAyar from './guard/guard-ayar';
 import guardDurum from './guard/guard-durum';
@@ -66,6 +69,10 @@ export const ALL_COMMANDS: SlashCommand[] = [
   guardYetkili,
   guardOlaylar,
   guardIade,
+  // Moderation
+  ban,
+  kick,
+  unban,
   // Admin
   autoSetup,
   kur,

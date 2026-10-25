@@ -77,7 +77,7 @@ async function main(): Promise<void> {
     if (error instanceof Error && /disallowed intents/i.test(error.message)) {
       throw new Error(
         'Discord ayrıcalıklı intent izni vermedi. Developer Portal → Bot → Privileged Gateway Intents bölümünden ' +
-          `${env.ENABLE_PREFIX_COMMANDS ? '"Message Content Intent" ' : ''}${env.ENABLE_GUILD_MEMBERS_INTENT ? '"Server Members Intent" ' : ''}` +
+          `${env.ENABLE_MESSAGE_LOGS ? '"Message Content Intent" ' : ''}${env.ENABLE_GUILD_MEMBERS_INTENT ? '"Server Members Intent" ' : ''}` +
           'ayarını açın ya da ilgili ENABLE_* değişkenini false yapın.',
       );
     }

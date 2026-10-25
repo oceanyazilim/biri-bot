@@ -1,5 +1,6 @@
 import type {
   AnySelectMenuInteraction,
+  AutocompleteInteraction,
   ButtonInteraction,
   ChatInputCommandInteraction,
   ModalSubmitInteraction,
@@ -7,7 +8,7 @@ import type {
 } from 'discord.js';
 import type { App } from '../core/App';
 
-export type CommandCategory = 'voice' | 'guard' | 'admin';
+export type CommandCategory = 'voice' | 'guard' | 'admin' | 'moderation';
 
 export interface SlashCommand {
   data: { name: string; toJSON(): RESTPostAPIChatInputApplicationCommandsJSONBody };
@@ -15,6 +16,8 @@ export interface SlashCommand {
   /** Overrides the default per-user cooldown. */
   cooldownMs?: number;
   execute(interaction: ChatInputCommandInteraction<'cached'>, app: App): Promise<void>;
+  /** Suggestions for options declared with `setAutocomplete(true)`. */
+  autocomplete?(interaction: AutocompleteInteraction<'cached'>, app: App): Promise<void>;
 }
 
 export type ComponentInteraction = ButtonInteraction<'cached'> | AnySelectMenuInteraction<'cached'> | ModalSubmitInteraction<'cached'>;

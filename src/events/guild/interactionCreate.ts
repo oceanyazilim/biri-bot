@@ -26,8 +26,11 @@ async function handleCommand(app: App, interaction: ChatInputCommandInteraction<
     await command.execute(interaction, app);
   } catch (caught) {
     error = caught;
-    app.logger.error({ err: caught, command: command.data.name, guildId: interaction.guildId }, 'Komut hatası');
-    await replyError(interaction, 'Komut çalıştırılırken beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar dene.');
+    // A refusal the command already explained to the user: record it, but no second error message.
+    if (!(caught instanceof Error && 'handled' in caught && caught.handled === true)) {
+      app.logger.error({ err: caught, command: command.data.name, guildId: interaction.guildId }, 'Komut hatası');
+      await replyError(interaction, 'Komut çalıştırılırken beklenmeyen bir hata oluştu. Lütfen daha sonra tekrar dene.');
+    }
   }
   app.health.increment('commands');
   await app.repos.commandAudit
@@ -70,6 +73,14 @@ export default defineEvent({
       return;
     }
     if (interaction.isChatInputCommand()) return handleCommand(app, interaction);
+    if (interaction.isAutocomplete()) {
+      const command = app.commands.get(interaction.commandName);
+      await command?.autocomplete?.(interaction, app).catch((error: unknown) => {
+        app.logger.warn({ err: error, command: interaction.commandName }, 'Otomatik tamamlama hatası');
+        return interaction.respond([]).catch(() => undefined);
+      });
+      return;
+    }
     if (interaction.isButton() || interaction.isAnySelectMenu() || interaction.isModalSubmit()) return handleComponent(app, interaction);
   },
 });

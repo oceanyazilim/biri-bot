@@ -41,6 +41,8 @@ export interface ModerationRequest {
   reason: string | null;
   /** Unique per invocation (message id), used for Guard deduplication. */
   invocationId: string;
+  /** Ban only: how many seconds of the user's recent messages to delete (0–604800). */
+  deleteMessageSeconds?: number;
 }
 
 /**
@@ -116,7 +118,7 @@ export class ModerationService {
     }
 
     try {
-      if (action === 'BAN') await guild.bans.create(targetId, { reason: auditReason });
+      if (action === 'BAN') await guild.bans.create(targetId, { reason: auditReason, deleteMessageSeconds: request.deleteMessageSeconds ?? 0 });
       else await target!.kick(auditReason);
     } catch (error) {
       return fail(`İşlem başarısız: ${describeError(error)}`);
