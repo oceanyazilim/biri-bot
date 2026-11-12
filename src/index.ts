@@ -4,6 +4,7 @@ import type { App } from './core/App';
 import { createApp } from './core/createApp';
 import { registerEvents } from './events';
 import { deployCommands } from './services/commandDeployer';
+import { fetchPrivilegedIntents, fitToPrivilegedIntents } from './services/privilegedIntents';
 import { createLogger, type Logger } from './utils/logger';
 
 function startBackgroundJobs(app: App): () => void {
@@ -44,29 +45,32 @@ async function boot(env: Env, logger: Logger): Promise<App> {
 }
 
 /**
- * Logs in; when Discord refuses the Message Content intent, starts again
- * without the features that need it, so the rest of Biri keeps running.
+ * Logs in with only the privileged intents enabled in the Developer Portal.
+ * If Discord still refuses (the portal could not be read, or a switch changed
+ * meanwhile), starts once more without any privileged intent so that temp
+ * rooms, Guard and slash commands keep running.
  */
-async function bootWithFallback(env: Env, logger: Logger): Promise<App> {
+async function bootWithFallback(configured: Env, logger: Logger): Promise<App> {
+  let env = configured;
+  const available = await fetchPrivilegedIntents(configured.DISCORD_TOKEN);
+  if (available) {
+    const fitted = fitToPrivilegedIntents(configured, available);
+    for (const warning of fitted.warnings) logger.warn(warning);
+    env = fitted.env;
+  } else {
+    logger.warn('Discord uygulama ayarları okunamadı; intent kontrolü bağlantı sırasında yapılacak.');
+  }
+
   try {
     return await boot(env, logger);
   } catch (error) {
     if (!isDisallowedIntents(error)) throw error;
-    if (env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MESSAGE_LOGS) {
-      logger.warn(
-        'Discord "Message Content Intent" iznini vermedi. Prefix komutları (.yargi, .unyargı) ve mesaj logları KAPALI olarak başlatılıyor. ' +
-          'Açmak için: Developer Portal → Bot → Privileged Gateway Intents → Message Content Intent.',
-      );
-      try {
-        return await boot({ ...env, ENABLE_PREFIX_COMMANDS: false, ENABLE_MESSAGE_LOGS: false }, logger);
-      } catch (retryError) {
-        if (!isDisallowedIntents(retryError)) throw retryError;
-      }
-    }
-    throw new Error(
-      'Discord ayrıcalıklı intent izni vermedi. Developer Portal → Bot → Privileged Gateway Intents bölümünden ' +
-        `${env.ENABLE_GUILD_MEMBERS_INTENT ? '"Server Members Intent" ' : ''}ayarını açın ya da ENABLE_GUILD_MEMBERS_INTENT=false yapın.`,
+    const bare = { ...env, ENABLE_PREFIX_COMMANDS: false, ENABLE_MESSAGE_LOGS: false, ENABLE_GUILD_MEMBERS_INTENT: false };
+    logger.warn(
+      'Discord ayrıcalıklı intent iznini vermedi (4014). Biri; prefix komutları, mesaj logları ve üye logları KAPALI olarak başlatılıyor. ' +
+        'Developer Portal → Bot → Privileged Gateway Intents bölümünden "Message Content Intent" ve gerekirse "Server Members Intent" açın.',
     );
+    return boot(bare, logger);
   }
 }
 
