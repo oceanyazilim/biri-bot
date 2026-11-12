@@ -2,7 +2,7 @@ import { Events } from 'discord.js';
 import { handlePrefixMessage } from '../../modules/moderation/prefixCommands';
 import { defineEvent } from '../types';
 
-/** Registered only when ENABLE_PREFIX_COMMANDS=true (needs the Message Content intent). */
+/** Registered when prefix commands are on (default) and Discord granted the Message Content intent. */
 export default defineEvent({
   name: Events.MessageCreate,
   async execute(app, message) {

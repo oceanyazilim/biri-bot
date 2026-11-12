@@ -1,10 +1,10 @@
 import { RETENTION_SWEEP_INTERVAL_MS, STALE_SWEEP_INTERVAL_MS } from './config/constants';
-import { loadEnv } from './config/env';
+import { loadEnv, type Env } from './config/env';
 import type { App } from './core/App';
 import { createApp } from './core/createApp';
 import { registerEvents } from './events';
 import { deployCommands } from './services/commandDeployer';
-import { createLogger } from './utils/logger';
+import { createLogger, type Logger } from './utils/logger';
 
 function startBackgroundJobs(app: App): () => void {
   const staleSweep = setInterval(() => {
@@ -23,13 +23,56 @@ function startBackgroundJobs(app: App): () => void {
   };
 }
 
+const isDisallowedIntents = (error: unknown): boolean => error instanceof Error && /disallowed intents/i.test(error.message);
+
+/** Builds the app, connects to the database and logs in. Cleans up after itself when login fails. */
+async function boot(env: Env, logger: Logger): Promise<App> {
+  const app = createApp(env, logger);
+  await app.prisma.$connect();
+  registerEvents(app);
+  app.client.on('error', (error) => logger.error({ err: error }, 'Discord istemci hatası'));
+  app.client.on('shardDisconnect', (event, shardId) => logger.warn({ code: event.code, shardId }, 'Gateway bağlantısı koptu'));
+  app.client.on('shardReconnecting', (shardId) => logger.info({ shardId }, 'Gateway yeniden bağlanıyor'));
+  try {
+    await app.client.login(env.DISCORD_TOKEN);
+    return app;
+  } catch (error) {
+    await app.client.destroy().catch(() => undefined);
+    await app.prisma.$disconnect().catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Logs in; when Discord refuses the Message Content intent, starts again
+ * without the features that need it, so the rest of Biri keeps running.
+ */
+async function bootWithFallback(env: Env, logger: Logger): Promise<App> {
+  try {
+    return await boot(env, logger);
+  } catch (error) {
+    if (!isDisallowedIntents(error)) throw error;
+    if (env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MESSAGE_LOGS) {
+      logger.warn(
+        'Discord "Message Content Intent" iznini vermedi. Prefix komutları (.yargi, .unyargı) ve mesaj logları KAPALI olarak başlatılıyor. ' +
+          'Açmak için: Developer Portal → Bot → Privileged Gateway Intents → Message Content Intent.',
+      );
+      try {
+        return await boot({ ...env, ENABLE_PREFIX_COMMANDS: false, ENABLE_MESSAGE_LOGS: false }, logger);
+      } catch (retryError) {
+        if (!isDisallowedIntents(retryError)) throw retryError;
+      }
+    }
+    throw new Error(
+      'Discord ayrıcalıklı intent izni vermedi. Developer Portal → Bot → Privileged Gateway Intents bölümünden ' +
+        `${env.ENABLE_GUILD_MEMBERS_INTENT ? '"Server Members Intent" ' : ''}ayarını açın ya da ENABLE_GUILD_MEMBERS_INTENT=false yapın.`,
+    );
+  }
+}
+
 async function main(): Promise<void> {
   const env = loadEnv();
   const logger = createLogger(env.LOG_LEVEL, env.NODE_ENV === 'development');
-  const app = createApp(env, logger);
-
-  await app.prisma.$connect();
-  logger.info('Veritabanı bağlantısı kuruldu');
 
   if (env.AUTO_DEPLOY_COMMANDS) {
     await deployCommands({ token: env.DISCORD_TOKEN, clientId: env.DISCORD_CLIENT_ID, guildId: env.DEV_GUILD_ID }, logger).catch((error: unknown) =>
@@ -37,14 +80,11 @@ async function main(): Promise<void> {
     );
   }
 
-  registerEvents(app);
+  const app = await bootWithFallback(env, logger);
+  logger.info('Veritabanı ve Discord bağlantısı kuruldu');
   app.logDispatcher.start();
   app.health.listen(env.HEALTH_PORT);
   const stopJobs = startBackgroundJobs(app);
-
-  app.client.on('error', (error) => logger.error({ err: error }, 'Discord istemci hatası'));
-  app.client.on('shardDisconnect', (event, shardId) => logger.warn({ code: event.code, shardId }, 'Gateway bağlantısı koptu'));
-  app.client.on('shardReconnecting', (shardId) => logger.info({ shardId }, 'Gateway yeniden bağlanıyor'));
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -70,19 +110,6 @@ async function main(): Promise<void> {
     logger.fatal({ err: error }, 'Yakalanmamış hata');
     void shutdown('uncaughtException');
   });
-
-  try {
-    await app.client.login(env.DISCORD_TOKEN);
-  } catch (error) {
-    if (error instanceof Error && /disallowed intents/i.test(error.message)) {
-      throw new Error(
-        'Discord ayrıcalıklı intent izni vermedi. Developer Portal → Bot → Privileged Gateway Intents bölümünden ' +
-          `${env.ENABLE_MESSAGE_LOGS || env.ENABLE_PREFIX_COMMANDS ? '"Message Content Intent" ' : ''}${env.ENABLE_GUILD_MEMBERS_INTENT ? '"Server Members Intent" ' : ''}` +
-          'ayarını açın ya da ilgili ENABLE_* değişkenini false yapın.',
-      );
-    }
-    throw error;
-  }
 }
 
 main().catch((error: unknown) => {

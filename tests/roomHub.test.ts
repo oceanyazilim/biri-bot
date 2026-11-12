@@ -2,7 +2,7 @@ import { ChannelType, PermissionFlagsBits, type Guild } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import { roomHubHandler } from '../src/components/roomHub';
 import type { App } from '../src/core/App';
-import { HUB_CHANNEL_NAME } from '../src/modules/tempVoice/panel';
+import { HUB_CHANNEL_NAME, LEGACY_HUB_CHANNEL_NAMES } from '../src/modules/tempVoice/panel';
 import { TempVoiceService } from '../src/modules/tempVoice/TempVoiceService';
 import type { ComponentInteraction } from '../src/types/command';
 import { createSilentLogger } from '../src/utils/logger';
@@ -17,6 +17,30 @@ async function hubHarness() {
   const result = await h.service.setup(g, setupOptions);
   const panel = h.guild.channels.cache.get(result.panel.channelId!) as FakeTextChannel;
   const app = asDiscord<App>({ rooms: h.rooms, tempVoice: h.service });
+
+  /** Simulates a member picking a value from the panel's limit menu. */
+  const pickLimit = async (member: FakeMember, value: string) => {
+    const interaction = {
+      member,
+      guildId: h.guild.id,
+      values: [value],
+      deferred: false,
+      replied: false,
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      update: vi.fn(async () => {
+        interaction.replied = true;
+      }),
+      deferUpdate: vi.fn(async () => {
+        interaction.deferred = true;
+      }),
+      reply: vi.fn(async () => undefined),
+      editReply: vi.fn(async () => undefined),
+      followUp: vi.fn(async () => undefined),
+    };
+    await roomHubHandler.handle(asDiscord<ComponentInteraction>(interaction), app, ['limit']);
+    return { interaction, payload: JSON.stringify(interaction.followUp.mock.calls) };
+  };
 
   /** Simulates a member clicking a control panel button. */
   const click = async (member: FakeMember, action: string) => {
@@ -39,7 +63,7 @@ async function hubHarness() {
     const payload = JSON.stringify([...interaction.reply.mock.calls, ...interaction.editReply.mock.calls]);
     return { interaction, payload };
   };
-  return { ...h, g, result, panel, click };
+  return { ...h, g, result, panel, click, pickLimit };
 }
 
 describe('control panel channel', () => {
@@ -49,7 +73,9 @@ describe('control panel channel', () => {
     expect(h.panel).toMatchObject({ name: HUB_CHANNEL_NAME, type: ChannelType.GuildText, parentId: h.category.id });
     expect(h.panel.sent).toHaveLength(1);
     const payload = JSON.stringify(h.panel.sent[0]!.payload);
-    expect(payload).toContain('Oda Kontrol Paneli');
+    expect(h.panel.name).toBe('🎛️・biri-yönetim');
+    expect(payload).toContain('Ses Odası Yönetimi');
+    expect(payload).toContain('biri:hub:limit');
     for (const action of ['lock', 'unlock', 'hide', 'show', 'kick', 'block', 'allow', 'transfer', 'close']) {
       expect(payload).toContain(`biri:hub:${action}`);
     }
@@ -151,5 +177,51 @@ describe('control panel buttons', () => {
     const { interaction } = await h.click(owner, 'settings');
     expect(interaction.showModal).toHaveBeenCalledTimes(1);
     expect(interaction.reply).not.toHaveBeenCalled();
+  });
+});
+
+describe('control panel limit menu and renaming', () => {
+  it('sets the limit of the member’s own room and resets the shared menu', async () => {
+    const h = await hubHarness();
+    const owner = h.guild.addMember({ name: 'Sahip' });
+    const room = await h.createRoom(owner);
+    const { interaction, payload } = await h.pickLimit(owner, '5');
+    expect(room.userLimit).toBe(5);
+    expect(payload).toContain('**5**');
+    expect(interaction.update).toHaveBeenCalledTimes(1);
+
+    await h.pickLimit(owner, '0');
+    expect(room.userLimit).toBe(0);
+  });
+
+  it('refuses members without a room of their own', async () => {
+    const h = await hubHarness();
+    const owner = h.guild.addMember({ name: 'Sahip' });
+    const guest = h.guild.addMember({ name: 'Misafir' });
+    const room = await h.createRoom(owner);
+    await h.move(guest, room.id);
+    const { payload } = await h.pickLimit(guest, '2');
+    expect(payload).toContain('sana ait değil');
+    expect(room.userLimit).toBe(0);
+  });
+
+  it('renames a panel channel from an earlier version on restart, keeping custom names', async () => {
+    const h = await hubHarness();
+    h.panel.name = LEGACY_HUB_CHANNEL_NAMES[0]!;
+    await h.service.recoverGuild(h.g);
+    expect(h.panel.name).toBe(HUB_CHANNEL_NAME);
+    expect(h.panel.sent).toHaveLength(1);
+
+    h.panel.name = '🎛️・odalarım';
+    await h.service.recoverGuild(h.g);
+    expect(h.panel.name).toBe('🎛️・odalarım');
+  });
+
+  it('adopts an existing legacy channel on setup instead of creating a second one', async () => {
+    const h = await createVoiceHarness();
+    const legacy = h.guild.addTextChannel(LEGACY_HUB_CHANNEL_NAMES[0]!, h.category.id);
+    const result = await h.service.setup(asDiscord<Guild>(h.guild), setupOptions);
+    expect(result.panel).toMatchObject({ channelId: legacy.id, created: false });
+    expect(legacy.name).toBe(HUB_CHANNEL_NAME);
   });
 });

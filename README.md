@@ -36,7 +36,7 @@ Tüm kullanıcı mesajları Türkçedir. Kod ve teknik dokümantasyon İngilizce
 - Sahip ayrılınca bekleme süresi sonunda sahiplik, odada en uzun süredir bulunan kişiye geçer
 - Kilitleme, gizleme, limit, isim, odaya özel engel/izin, sahiplik devri
 - Etkileşimli yönetim paneli (`/odam`): butonlar, kullanıcı seçme menüleri, ayar penceresi
-- Kalıcı **🎛️・oda-paneli** kanalı: ses kategorisinde, herkesin kendi odasını düğmelerle yönettiği sabit menü (kilitle, aç, gizle, göster, at, engelle, izin ver, isim/limit, devret, kapat). Bot yeniden başlasa da çalışır; kanal üyeler için salt okunurdur.
+- Kalıcı **🎛️・biri-yönetim** kanalı: ses kategorisinde, herkesin kendi odasını düğmelerle yönettiği sabit menü (kilitle, aç, gizle, göster, at, engelle, izin ver, isim/limit, hızlı kişi limiti menüsü, devret, kapat). Eski sürümlerden kalan `🎛️・oda-paneli` kanalı otomatik olarak yeniden adlandırılır. Bot yeniden başlasa da çalışır; kanal üyeler için salt okunurdur.
 - Bot yeniden başlarsa oda durumu veritabanından kurtarılır
 - Kalıcı kanallar asla silinmez: yalnızca veritabanında kayıtlı geçici odalar silinir
 - Oda sahiplerine **hiçbir sunucu geneli yetki verilmez**. `/at` yalnızca sesten çıkarır, sunucudan atmaz.
@@ -84,7 +84,7 @@ Biri'nin kendi işlemleri (oda açma/kapama, `/ban` vb.) tekrar loglanmaz; ilgil
 3. Sol menüden **Bot** sekmesine gidin:
    - **Reset Token** → token'ı kopyalayın → `.env` içindeki `DISCORD_TOKEN`. *Token'ı kimseyle paylaşmayın.*
    - **Privileged Gateway Intents**:
-     - *Message Content Intent*: `.yargi` / `.unyargı` prefix komutlarını (`ENABLE_PREFIX_COMMANDS=true`) ya da silinen/düzenlenen mesaj loglarını (`ENABLE_MESSAGE_LOGS=true`) kullanacaksanız **açın**. İkisini de kullanmayacaksanız kapalı kalsın.
+     - *Message Content Intent*: `.yargi` / `.unyargı` prefix komutları (varsayılan olarak açık) ve silinen/düzenlenen mesaj logları (`ENABLE_MESSAGE_LOGS=true`) için **açın**. Kapalı kalırsa bot bu iki özellik olmadan çalışır.
      - *Server Members Intent*: isteğe bağlıdır. Açarsanız `.env` içinde `ENABLE_GUILD_MEMBERS_INTENT=true` yapın. Üye katılma/ayrılma logları ve atma (kick) olayları için ek doğrulama sağlar.
      - *Presence Intent*: kapalı kalsın.
    - **Public Bot** seçeneğini, botu yalnızca siz ekleyecekseniz kapatabilirsiniz.
@@ -230,11 +230,11 @@ Komutlar yalnızca ilgili yetkiye sahip üyelerin `/` menüsünde görünür.
 | `/ban kullanici [sebep] [mesaj-sil]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan biri de ID ile seçilebilir. `mesaj-sil`: son 1 saat – 7 güne kadar mesajlarını da siler. |
 | `/kick kullanici [sebep]` | Üyeleri At | Sunucudan atar. |
 | `/unban kullanici [sebep]` | Üyeleri Yasakla | Yasağı kaldırır. Yazmaya başlayınca yasaklılar listesi açılır. Banı kaldırmak saldırı sayılmaz, Guard'a işlenmez. |
-| `.yargi <ID \| @kullanıcı> [sebep]` | Üyeleri Yasakla | `/ban` ile aynı işi yapan prefix komutu. Sunucuda olmayan biri de ID ile yargılanabilir; sebep yazmak zorunlu değildir. `.yargı` olarak da yazılabilir. |
-| `.unyargı <ID \| @kullanıcı> [sebep]` | Üyeleri Yasakla | Yargıyı (yasağı) kaldırır; sebep isteğe bağlıdır. `.unyargi` olarak da yazılabilir. |
+| `.yargi <ID \| @kullanıcı> [sebep]` | Yargı listesi + Üyeleri Yasakla | `/ban` ile aynı işi yapan prefix komutu. Sunucuda olmayan biri de ID ile yargılanabilir; sebep yazmak zorunlu değildir. `.yargı` olarak da yazılabilir. |
+| `.unyargı <ID \| @kullanıcı> [sebep]` | Yargı listesi + Üyeleri Yasakla | Yargıyı (yasağı) kaldırır; sebep isteğe bağlıdır. `.unyargi` olarak da yazılabilir. |
 | `/nuke [kanal] [sebep]` | Kanalları Yönet | Kanalı sıfırlar: aynı ad, konu, izin ve konumla kopyalar, eskisini tüm mesajlarıyla siler. Onay düğmesi ister. Log ve oda paneli kanallarında çalışmaz. Guard'a kanal silme olarak işlenir; toplu nuke engellenir. |
 
-- **Prefix komutları** varsayılan olarak kapalıdır. Açmak için `.env` içinde `ENABLE_PREFIX_COMMANDS=true` yapın ve Developer Portal'da **Message Content Intent**'i açın. Önek `PREFIX` ile değiştirilebilir (varsayılan `.`). Yetkisi olmayan üyelerin yazdığı `.yargi` mesajları sessizce yok sayılır.
+- **Prefix komutları** varsayılan olarak **açıktır**; çalışmaları için Developer Portal'da **Message Content Intent** açık olmalıdır. Intent kapalıysa bot çökmez, bu komutlar olmadan açılır ve logda uyarı verir. Kapatmak için `ENABLE_PREFIX_COMMANDS=false`. Önek `PREFIX` ile değiştirilebilir (varsayılan `.`). **Yalnızca `YARGI_ALLOWED_USER_IDS` listesindeki kişiler** `.yargi` / `.unyargı` kullanabilir (varsayılan liste: `736930531534700634`, `887788724988026890`, `399295370921902080`). Listede olmayanlara *"Size bu yetki tanınmadı, lütfen denemeyiniz."* uyarısı gösterilir (kişi başına 10 saniyede bir) ve deneme komut kaydına yazılır. Listedekilerin ayrıca **Üyeleri Yasakla** yetkisi olmalıdır. `/ban` ve `/unban` bu listeden etkilenmez.
 - Log kaydında kullanıcı etiketi ve kimliği, yetkili, sebep ve kullanılan komut görünür. Yasak kaldırılırken kişinin neden yasaklandığı da eklenir.
 - Rol hiyerarşisi uygulanır: kendinizle aynı veya daha yüksek roldeki birini, sunucu sahibini ya da kendinizi banlayamazsınız.
 - Hedef kişiye mümkünse sebebi içeren bir DM gönderilir. Denetim kaydına `Yetkili (ID): sebep` yazılır.
@@ -244,7 +244,7 @@ Komutlar yalnızca ilgili yetkiye sahip üyelerin `/` menüsünde görünür.
 
 | Komut | Açıklama |
 |---|---|
-| `/auto-setup` | **Tek seferde kurulum:** ses kategorisi + `➕・Oda Oluştur` kanalı + `🎛️・oda-paneli` kontrol paneli, güvenlik log kategorisi + 8 log kanalı, Guard açılır (Uyarı modunda). Tekrar çalıştırmak güvenlidir. |
+| `/auto-setup` | **Tek seferde kurulum:** ses kategorisi + `➕・Oda Oluştur` kanalı + `🎛️・biri-yönetim` kontrol paneli, güvenlik log kategorisi + 8 log kanalı, Guard açılır (Uyarı modunda). Tekrar çalıştırmak güvenlidir. |
 | `/kur` | Yalnızca geçici ses sistemini kur / ayarlarını güncelle |
 | `/yardim` | Komut listesi |
 

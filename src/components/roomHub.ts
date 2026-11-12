@@ -2,6 +2,7 @@ import { MessageFlags } from 'discord.js';
 import { RoomManager, type RoomActionResult } from '../modules/tempVoice/RoomManager';
 import {
   buildCloseConfirmation,
+  buildHubPanel,
   buildSettingsModal,
   buildTransferMenu,
   buildUserPicker,
@@ -19,7 +20,19 @@ import { replyError, replyResult } from '../utils/interactions';
 export const roomHubHandler: ComponentHandler = {
   prefix: 'hub',
   async handle(interaction, app, [action]) {
-    if (!interaction.isButton() || !action) return;
+    if (!action) return;
+    if (action === 'limit') {
+      if (!interaction.isStringSelectMenu()) return;
+      // Re-render the shared panel first so the menu does not keep showing this member's choice.
+      const config = await app.tempVoice.getConfig(interaction.guildId);
+      if (config) await interaction.update({ ...buildHubPanel(config.creatorChannelId), allowedMentions: { parse: [] } });
+      else await interaction.deferUpdate();
+      const context = app.rooms.resolve(interaction.member);
+      const result = RoomManager.isContext(context) ? await app.rooms.setLimit(context, Number(interaction.values[0])) : context;
+      await replyResult(interaction, result);
+      return;
+    }
+    if (!interaction.isButton()) return;
     const context = app.rooms.resolve(interaction.member);
     if (!RoomManager.isContext(context)) return replyError(interaction, context.message);
     const rooms = app.rooms;

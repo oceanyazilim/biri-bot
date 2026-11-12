@@ -9,7 +9,7 @@ const command: SlashCommand = {
     const prefix = app.env.ENABLE_PREFIX_COMMANDS ? app.env.PREFIX : null;
     const embed = brandEmbed()
       .setTitle('📖 Biri • Komutlar')
-      .setDescription('**➕・Oda Oluştur** kanalına katılarak kendi ses odanı oluşturabilirsin. Odanı **🎛️・oda-paneli** kanalındaki düğmelerle de yönetebilirsin.')
+      .setDescription('**➕・Oda Oluştur** kanalına katılarak kendi ses odanı oluşturabilirsin. Odanı **🎛️・biri-yönetim** kanalındaki düğmelerle de yönetebilirsin.')
       .addFields(
         {
           name: '🔊 Oda Yönetimi',

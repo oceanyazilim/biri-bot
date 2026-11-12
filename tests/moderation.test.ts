@@ -5,6 +5,7 @@ import { ModerationService, type ModerationAction, type NukeableChannel } from '
 import banCommand from '../src/commands/moderation/ban';
 import kickCommand from '../src/commands/moderation/kick';
 import unbanCommand, { forgetBans } from '../src/commands/moderation/unban';
+import { loadEnv } from '../src/config/env';
 import { gatewayIntents } from '../src/core/createApp';
 import { buildEventList } from '../src/events';
 import { handlePrefixMessage } from '../src/modules/moderation/prefixCommands';
@@ -299,8 +300,9 @@ describe('prefix commands (.yargi / .unyargı)', () => {
     h.moderation.setLogSink((_guildId, embed, kind) => logs.push({ kind, embed: embed.toJSON() }));
     const audit: Array<{ command: string; success: boolean; options: string }> = [];
     const cooldowns = new CooldownService();
+    const env = { PREFIX: '.', YARGI_ALLOWED_USER_IDS: [] as string[] };
     const app = asDiscord<App>({
-      env: { PREFIX: '.' },
+      env,
       moderation: h.moderation,
       cooldowns,
       health: { increment: vi.fn() },
@@ -315,7 +317,8 @@ describe('prefix commands (.yargi / .unyargı)', () => {
     };
     /** A second moderator, so consecutive commands are not stopped by the per-user cooldown. */
     const colleague = h.guild.addMember({ name: 'Yargıç', roles: [h.modRole] });
-    return { ...h, logs, audit, say, colleague };
+    env.YARGI_ALLOWED_USER_IDS.push(h.moderator.id, colleague.id, h.guild.ownerId);
+    return { ...h, env, logs, audit, say, colleague };
   }
 
   it('parses names case- and dotless-i-insensitively', () => {
@@ -382,14 +385,42 @@ describe('prefix commands (.yargi / .unyargı)', () => {
     expect(h.repos.guard.events).toHaveLength(0);
   });
 
-  it('ignores members without Ban Members and unrelated messages silently', async () => {
+  it('warns users who are not on the yargı list, even with Ban Members, without spamming', async () => {
+    const h = await prefixHarness();
+    const unlisted = h.guild.addMember({ name: 'Listesiz', roles: [h.modRole] });
+    const first = await h.say(`.YARGI ${h.victim.id} reklam`, unlisted);
+    expect(first.text).toContain('Size bu yetki tanınmadı, lütfen denemeyiniz.');
+    expect((await h.say(`.unyargı ${h.victim.id}`, unlisted)).reply).not.toHaveBeenCalled(); // warned once per 10 s
+    expect(h.guild.bans.create).not.toHaveBeenCalled();
+    expect(h.audit).toEqual([expect.objectContaining({ command: '.yargi', success: false })]);
+  });
+
+  it('still requires Ban Members from listed users', async () => {
+    const h = await prefixHarness();
+    const listed = h.guild.addMember({ name: 'Listede' });
+    h.env.YARGI_ALLOWED_USER_IDS.push(listed.id);
+    expect((await h.say(`.yargi ${h.victim.id}`, listed)).text).toContain('Üyeleri Yasakla');
+    expect(h.guild.bans.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores unrelated prefixed messages silently', async () => {
     const h = await prefixHarness();
     const regular = h.guild.addMember({ name: 'Sıradan' });
-    expect((await h.say(`.yargi ${h.victim.id}`, regular)).reply).not.toHaveBeenCalled();
-    expect((await h.say('.selam nasılsın')).reply).not.toHaveBeenCalled();
+    expect((await h.say('.selam nasılsın', regular)).reply).not.toHaveBeenCalled();
     expect((await h.say('...')).reply).not.toHaveBeenCalled();
-    expect(h.guild.bans.create).not.toHaveBeenCalled();
     expect(h.audit).toHaveLength(0);
+  });
+
+  it('reads the yargı list from the environment with the three default ids', () => {
+    const base = { DISCORD_TOKEN: 'x'.repeat(60), DISCORD_CLIENT_ID: '100000000000000001', DATABASE_URL: 'file:./test.db' };
+    expect(loadEnv(base).YARGI_ALLOWED_USER_IDS).toEqual(['736930531534700634', '887788724988026890', '399295370921902080']);
+    expect(loadEnv({ ...base, YARGI_ALLOWED_USER_IDS: ' 100000000000000002 , 100000000000000003,' }).YARGI_ALLOWED_USER_IDS).toEqual([
+      '100000000000000002',
+      '100000000000000003',
+    ]);
+    expect(loadEnv({ ...base, YARGI_ALLOWED_USER_IDS: '' }).YARGI_ALLOWED_USER_IDS).toEqual([]);
+    expect(() => loadEnv({ ...base, YARGI_ALLOWED_USER_IDS: 'emirhan' })).toThrow();
+    expect(loadEnv(base).ENABLE_PREFIX_COMMANDS).toBe(true);
   });
 
   it('is rate limited per moderator and still counted by Guard', async () => {

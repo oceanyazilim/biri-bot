@@ -202,6 +202,10 @@ abstract class FakeGuildChannel {
     return false;
   }
   rawPosition = 0;
+  setName = vi.fn(async (name: string) => {
+    this.name = name;
+    return this;
+  });
   setPosition = vi.fn(async (position: number) => {
     this.rawPosition = position;
     return this;
@@ -267,10 +271,6 @@ export class FakeVoiceChannel extends FakeGuildChannel {
   userLimit = 0;
   members = new Collection<string, FakeMember>();
   send = vi.fn(async () => undefined);
-  setName = vi.fn(async (name: string) => {
-    this.name = name;
-    return this;
-  });
   setUserLimit = vi.fn(async (limit: number) => {
     this.userLimit = limit;
     return this;

@@ -27,7 +27,7 @@ import type { Logger } from '../../utils/logger';
 import { TimerRegistry } from '../../utils/timers';
 import { brandEmbed } from '../logging/embeds';
 import { JoinTracker, pickSuccessor } from './JoinTracker';
-import { buildHubPanel, HUB_CHANNEL_NAME } from './panel';
+import { buildHubPanel, HUB_CHANNEL_NAME, LEGACY_HUB_CHANNEL_NAMES } from './panel';
 import { buildRoomName } from './roomNaming';
 import { computeRoomOverwrites, toOverwriteOptions, type BaseOverwrite, type RoomPermissionState } from './roomPermissions';
 
@@ -206,14 +206,15 @@ export class TempVoiceService {
       if (!channel && options.create) {
         channel =
           category?.children.cache.find(
-            (child): child is TextChannel => child.type === ChannelType.GuildText && child.name === HUB_CHANNEL_NAME,
+            (child): child is TextChannel =>
+              child.type === ChannelType.GuildText && (child.name === HUB_CHANNEL_NAME || LEGACY_HUB_CHANNEL_NAMES.includes(child.name)),
           ) ?? null;
         if (!channel) {
           channel = await guild.channels.create({
             name: HUB_CHANNEL_NAME,
             type: ChannelType.GuildText,
             parent: category?.id ?? null,
-            topic: 'Geçici ses odanı buradaki düğmelerle yönet.',
+            topic: 'Geçici ses odanı buradaki düğmelerle yönet: kilitle, gizle, limit, at, engelle, devret, kapat.',
             permissionOverwrites: this.panelOverwrites(guild, category),
             reason: 'Biri oda kontrol paneli',
           });
@@ -222,6 +223,12 @@ export class TempVoiceService {
         }
       }
       if (!channel) return { channelId: null, created: false, error: null };
+      // Channels from earlier versions get the current name; a name chosen by the server is kept.
+      if (LEGACY_HUB_CHANNEL_NAMES.includes(channel.name)) {
+        await channel.setName(HUB_CHANNEL_NAME, 'Biri: yönetim kanalı yeni adına taşındı').catch((error: unknown) =>
+          this.logger.warn({ err: error, guildId: guild.id }, 'Yönetim kanalı yeniden adlandırılamadı'),
+        );
+      }
 
       const payload = { ...buildHubPanel(config.creatorChannelId), allowedMentions: { parse: [] as [] } };
       const existing =

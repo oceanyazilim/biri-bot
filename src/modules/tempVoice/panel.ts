@@ -3,6 +3,7 @@ import {
   ButtonBuilder,
   ButtonStyle,
   ModalBuilder,
+  StringSelectMenuBuilder,
   TextInputBuilder,
   TextInputStyle,
   UserSelectMenuBuilder,
@@ -154,7 +155,12 @@ export function buildSettingsModal(channelId: string, currentName: string, curre
     );
 }
 
-export const HUB_CHANNEL_NAME = '🎛️・oda-paneli';
+export const HUB_CHANNEL_NAME = '🎛️・biri-yönetim';
+/** Earlier names of the panel channel; such channels are renamed to HUB_CHANNEL_NAME automatically. */
+export const LEGACY_HUB_CHANNEL_NAMES: readonly string[] = ['🎛️・oda-paneli'];
+
+/** Quick choices of the panel's limit menu; 0 = no limit. */
+export const HUB_LIMIT_CHOICES = [0, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25] as const;
 
 /**
  * The persistent control panel posted in the temp voice category. Its buttons
@@ -163,7 +169,7 @@ export const HUB_CHANNEL_NAME = '🎛️・oda-paneli';
  */
 export function buildHubPanel(creatorChannelId: string) {
   const embed = brandEmbed(COLORS.primary)
-    .setTitle('🎛️ Biri • Oda Kontrol Paneli')
+    .setTitle('🎛️ Biri • Ses Odası Yönetimi')
     .setDescription(
       `${channelMention(creatorChannelId)} kanalına katılarak kendi ses odanı oluştur, sonra odanı buradan yönet.\n\n` +
         'Düğmeler **yalnızca senin odan** üzerinde işlem yapar ve yanıtları sadece sen görürsün.',
@@ -172,6 +178,7 @@ export function buildHubPanel(creatorChannelId: string) {
       { name: '🔒 Erişim', value: 'Kilitle, kilidi aç, gizle veya göster', inline: true },
       { name: '👥 Kullanıcılar', value: 'Odadan at, engelle, özel izin ver', inline: true },
       { name: '⚙️ Oda', value: 'İsim ve limit, sahiplik devri, kapatma', inline: true },
+      { name: '👥 Hızlı Limit', value: 'En alttaki menüden odanın kişi sınırını tek tıkla seç', inline: false },
     );
   const button = (action: string, label: string, emoji: string, style = ButtonStyle.Secondary) =>
     new ButtonBuilder().setCustomId(customId('hub', action)).setLabel(label).setEmoji(emoji).setStyle(style);
@@ -196,6 +203,18 @@ export function buildHubPanel(creatorChannelId: string) {
         button('settings', 'İsim / Limit', '✏️'),
         button('transfer', 'Sahipliği Devret', '👑'),
         button('close', 'Odayı Kapat', '🗑️', ButtonStyle.Danger),
+      ),
+      new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId(customId('hub', 'limit'))
+          .setPlaceholder('👥 Kişi limiti seç')
+          .addOptions(
+            HUB_LIMIT_CHOICES.map((limit) => ({
+              label: limit === 0 ? 'Limitsiz' : `${limit} kişi`,
+              value: String(limit),
+              emoji: limit === 0 ? '♾️' : '👥',
+            })),
+          ),
       ),
     ],
   };

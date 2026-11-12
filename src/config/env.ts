@@ -31,8 +31,28 @@ const envSchema = z.object({
     .default('true')
     .transform((value) => value === 'true' || value === '1' || value === 'yes'),
 
-  /** Enables the `.yargi` / `.unyargı` prefix commands. Requires the privileged Message Content intent. */
-  ENABLE_PREFIX_COMMANDS: booleanFlag,
+  /**
+   * `.yargi` / `.unyargı` prefix commands, on by default. They need the privileged
+   * Message Content intent; when Discord refuses it, Biri starts without them.
+   */
+  ENABLE_PREFIX_COMMANDS: z
+    .enum(['true', 'false', '1', '0', 'yes', 'no'])
+    .default('true')
+    .transform((value) => value === 'true' || value === '1' || value === 'yes'),
+  /**
+   * Comma-separated user ids allowed to use `.yargi` / `.unyargı`. Everyone else is
+   * told they have not been granted it. Empty = nobody. Slash commands are unaffected.
+   */
+  YARGI_ALLOWED_USER_IDS: z
+    .string()
+    .default('736930531534700634,887788724988026890,399295370921902080')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    )
+    .pipe(z.array(snowflake)),
   /** Must not be `/`, which Discord reserves for slash commands. */
   PREFIX: z
     .string()
