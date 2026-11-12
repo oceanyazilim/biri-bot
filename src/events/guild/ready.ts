@@ -6,7 +6,16 @@ export default defineEvent({
   name: Events.ClientReady,
   once: true,
   async execute(app, client) {
-    app.logger.info({ user: client.user.tag, guilds: client.guilds.cache.size }, 'Biri hazır');
+    app.logger.info(
+      {
+        user: client.user.tag,
+        guilds: client.guilds.cache.size,
+        prefixCommands: app.env.ENABLE_PREFIX_COMMANDS ? app.env.PREFIX : false,
+        messageLogs: app.env.ENABLE_MESSAGE_LOGS,
+        membersIntent: app.env.ENABLE_GUILD_MEMBERS_INTENT,
+      },
+      'Biri hazır',
+    );
     client.user.setPresence({ activities: [{ name: 'ses odalarını ve sunucu güvenliğini', type: ActivityType.Watching }] });
 
     let restored = 0;

@@ -16,7 +16,7 @@ export interface LogAvailability {
  * Writes every administrative action from the audit log to the matching log
  * channel. Independent of Guard: logs flow even when Guard is off or a module
  * is disabled. Biri's own actions are skipped (they are logged by the feature
- * that performed them, e.g. temp rooms → ses-log, `.ban` → üye-log).
+ * that performed them, e.g. temp rooms → ses-log, `/ban` and `.yargi` → üye-log).
  */
 export class AuditLogFeed {
   constructor(

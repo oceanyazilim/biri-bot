@@ -11,7 +11,7 @@ const command: SlashCommand = {
     await runModeration(
       interaction,
       app,
-      { action: 'KICK', targetId: interaction.options.getUser('kullanici', true).id, reason: interaction.options.getString('sebep') },
+      { action: 'KICK', command: '/kick', targetId: interaction.options.getUser('kullanici', true).id, reason: interaction.options.getString('sebep') },
       '👢 Atıldı',
     );
   },

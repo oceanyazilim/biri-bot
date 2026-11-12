@@ -1,10 +1,15 @@
-import { Collection, PermissionFlagsBits, type AutocompleteInteraction, type ChatInputCommandInteraction, type GuildMember } from 'discord.js';
+import { Collection, GatewayIntentBits, PermissionFlagsBits, type AutocompleteInteraction, type ChatInputCommandInteraction, type GuildMember, type Message } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { App } from '../src/core/App';
 import { ModerationService, type ModerationAction, type NukeableChannel } from '../src/modules/moderation/ModerationService';
 import banCommand from '../src/commands/moderation/ban';
 import kickCommand from '../src/commands/moderation/kick';
 import unbanCommand, { forgetBans } from '../src/commands/moderation/unban';
+import { gatewayIntents } from '../src/core/createApp';
+import { buildEventList } from '../src/events';
+import { handlePrefixMessage } from '../src/modules/moderation/prefixCommands';
+import { parsePrefixCommand } from '../src/modules/moderation/prefixParser';
+import { CooldownService } from '../src/services/CooldownService';
 import { createSilentLogger } from '../src/utils/logger';
 import { asDiscord, BOT_ID, nextSnowflake, type FakeMember, type FakeTextChannel } from './fakes/discord';
 import { createGuardHarness, type GuardHarnessOptions } from './fakes/guardHarness';
@@ -284,5 +289,126 @@ describe('nuke', () => {
     expect(results[4]?.blockedByGuard).toBe(true);
     expect(h.repos.guard.incidents[0]).toMatchObject({ executorId: h.moderator.id, module: 'CHANNEL_DELETE', actionTaken: 'ROLES_STRIPPED' });
     expect(h.guild.channels.cache.has(channels[4]!.id)).toBe(true);
+  });
+});
+
+describe('prefix commands (.yargi / .unyargı)', () => {
+  async function prefixHarness(options: GuardHarnessOptions = {}) {
+    const h = await modHarness(options);
+    const logs: Array<{ kind: string; embed: { title?: string; description?: string; footer?: { text: string } } }> = [];
+    h.moderation.setLogSink((_guildId, embed, kind) => logs.push({ kind, embed: embed.toJSON() }));
+    const audit: Array<{ command: string; success: boolean; options: string }> = [];
+    const cooldowns = new CooldownService();
+    const app = asDiscord<App>({
+      env: { PREFIX: '.' },
+      moderation: h.moderation,
+      cooldowns,
+      health: { increment: vi.fn() },
+      logger: createSilentLogger(),
+      repos: { commandAudit: { record: vi.fn(async (entry: (typeof audit)[number]) => void audit.push(entry)) } },
+    });
+    const say = async (content: string, by: FakeMember = h.moderator) => {
+      const reply = vi.fn(async (_payload: unknown) => undefined);
+      const message = { id: nextSnowflake(), content, guild: h.guild, guildId: h.guild.id, member: by, author: by.user, reply };
+      await handlePrefixMessage(app, asDiscord<Message<true>>(message));
+      return { reply, text: JSON.stringify(reply.mock.calls) };
+    };
+    /** A second moderator, so consecutive commands are not stopped by the per-user cooldown. */
+    const colleague = h.guild.addMember({ name: 'Yargıç', roles: [h.modRole] });
+    return { ...h, logs, audit, say, colleague };
+  }
+
+  it('parses names case- and dotless-i-insensitively', () => {
+    expect(parsePrefixCommand('.yargi 123 reklam yaptı', '.')).toEqual({ name: 'yargi', args: ['123', 'reklam', 'yaptı'] });
+    expect(parsePrefixCommand('.YARGI 123', '.')?.name).toBe('yargi');
+    expect(parsePrefixCommand('.unyargı 123', '.')?.name).toBe('unyargi');
+    expect(parsePrefixCommand('.UNYARGİ 123', '.')?.name).toBe('unyargi');
+    expect(parsePrefixCommand('. yargi 123', '.')).toBeNull();
+    expect(parsePrefixCommand('yargi 123', '.')).toBeNull();
+    expect(parsePrefixCommand('.', '.')).toBeNull();
+  });
+
+  it('.yargi bans by id with a reason and logs who, why and how', async () => {
+    const h = await prefixHarness();
+    const { text } = await h.say(`.yargi ${h.victim.id} reklam ve küfür`);
+    expect(text).toContain('Yargılandı');
+    expect(h.guild.bans.create).toHaveBeenCalledWith(h.victim.id, { reason: expect.stringContaining(`(${h.moderator.id}): reklam ve küfür`), deleteMessageSeconds: 0 });
+    expect(h.logs).toHaveLength(1);
+    expect(h.logs[0]!.embed.description).toContain(`<@${h.victim.id}> \`Kurban#0\` (\`${h.victim.id}\`)`);
+    expect(h.logs[0]!.embed.description).toContain('**Sebep:** reklam ve küfür');
+    expect(h.logs[0]!.embed.footer?.text).toContain('.yargi');
+    expect(h.audit[0]).toMatchObject({ command: '.yargi', success: true });
+  });
+
+  it('.yargi works without a reason and for users outside the server', async () => {
+    const h = await prefixHarness();
+    const outsider = nextSnowflake();
+    const { text } = await h.say(`.yargı ${outsider}`);
+    expect(text).toContain('Yargılandı');
+    expect(h.guild.bannedIds.has(outsider)).toBe(true);
+    expect(h.logs[0]!.embed.description).toContain('**Sebep:** Belirtilmedi');
+    expect(h.logs[0]!.embed.description).toContain('sunucuda değildi');
+  });
+
+  it('.unyargı lifts the ban, with or without a reason, and shows the original ban reason', async () => {
+    const h = await prefixHarness();
+    await h.say(`.yargi ${h.victim.id} reklam`);
+    const { text } = await h.say(`.unyargı ${h.victim.id}`);
+    expect(text).toContain('Yargı Kaldırıldı');
+    expect(h.guild.bannedIds.has(h.victim.id)).toBe(false);
+    expect(h.logs[1]!.embed.title).toContain('Yasak Kaldırıldı');
+    expect(h.logs[1]!.embed.description).toContain('**Yasaklanma sebebi:**');
+    expect(h.logs[1]!.embed.description).toContain('reklam');
+
+    h.guild.bannedIds.add(h.victim.id);
+    expect((await h.say(`.unyargi <@${h.victim.id}> itiraz kabul`, h.colleague)).text).toContain('Yargı Kaldırıldı');
+    expect(h.guild.bans.remove).toHaveBeenLastCalledWith(h.victim.id, expect.stringContaining('itiraz kabul'));
+    expect((await h.say(`.unyargi ${nextSnowflake()}`, h.guild.members.cache.get(h.guild.ownerId)!)).text).toContain('yasaklı değil');
+  });
+
+  it('explains the usage when the id is missing or invalid', async () => {
+    const h = await prefixHarness();
+    expect((await h.say('.yargi')).text).toContain('Kullanım');
+    expect((await h.say('.yargi birisi reklam')).text).toContain('Kullanım');
+    expect(h.guild.bans.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects ids that are not Discord users before Guard counts them', async () => {
+    const h = await prefixHarness({ mode: 'ACTIVE' });
+    const ghost = nextSnowflake();
+    h.guild.unknownUserIds.add(ghost);
+    expect((await h.say(`.yargi ${ghost}`)).text).toContain('bulunamadı');
+    expect(h.guild.bans.create).not.toHaveBeenCalled();
+    expect(h.repos.guard.events).toHaveLength(0);
+  });
+
+  it('ignores members without Ban Members and unrelated messages silently', async () => {
+    const h = await prefixHarness();
+    const regular = h.guild.addMember({ name: 'Sıradan' });
+    expect((await h.say(`.yargi ${h.victim.id}`, regular)).reply).not.toHaveBeenCalled();
+    expect((await h.say('.selam nasılsın')).reply).not.toHaveBeenCalled();
+    expect((await h.say('...')).reply).not.toHaveBeenCalled();
+    expect(h.guild.bans.create).not.toHaveBeenCalled();
+    expect(h.audit).toHaveLength(0);
+  });
+
+  it('is rate limited per moderator and still counted by Guard', async () => {
+    const h = await prefixHarness({ mode: 'ALERT' });
+    const [a, b] = [h.guild.addMember({ name: 'A' }), h.guild.addMember({ name: 'B' })];
+    await h.say(`.yargi ${a.id}`);
+    expect((await h.say(`.yargi ${b.id}`)).text).toContain('Çok hızlısın');
+    expect(h.guild.bans.create).toHaveBeenCalledTimes(1);
+    const event = h.repos.guard.events.find((e) => e.executorId === h.moderator.id)!;
+    expect(event.module).toBe('MEMBER_BAN');
+    expect(event.details).toContain('.yargi');
+  });
+
+  it('requests the Message Content intent and the message event only when enabled', () => {
+    const off = { ENABLE_GUILD_MEMBERS_INTENT: false, ENABLE_MESSAGE_LOGS: false, ENABLE_PREFIX_COMMANDS: false };
+    expect(gatewayIntents(off)).not.toContain(GatewayIntentBits.MessageContent);
+    expect(gatewayIntents({ ...off, ENABLE_PREFIX_COMMANDS: true })).toEqual(expect.arrayContaining([GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent]));
+    const names = (prefix: boolean) => buildEventList(false, false, prefix).map((event) => event.name);
+    expect(names(true)).toContain('messageCreate');
+    expect(names(false)).not.toContain('messageCreate');
   });
 });

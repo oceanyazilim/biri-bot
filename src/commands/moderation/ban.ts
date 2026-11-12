@@ -30,6 +30,7 @@ const command: SlashCommand = {
       app,
       {
         action: 'BAN',
+        command: '/ban',
         targetId: interaction.options.getUser('kullanici', true).id,
         reason: interaction.options.getString('sebep'),
         deleteMessageSeconds: interaction.options.getInteger('mesaj-sil') ?? 0,

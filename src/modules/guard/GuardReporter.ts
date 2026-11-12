@@ -12,7 +12,7 @@ import type { GuardRepository } from '../../database/repositories/types';
 import type { GuardModule, GuardSettings, NormalizedSecurityEvent, Severity } from '../../types/guard';
 import { severityRank } from '../../types/guard';
 import { BoundedTtlMap } from '../../utils/collections';
-import { clip, formatDate, formatDateTime, roleMention, userMention } from '../../utils/format';
+import { clip, formatDate, formatDateTime, roleMention, userLabel, userMention } from '../../utils/format';
 import type { Logger } from '../../utils/logger';
 import { brandEmbed } from '../logging/embeds';
 import type { LogDispatcher } from '../logging/LogDispatcher';
@@ -105,7 +105,7 @@ export class GuardReporter {
     const name = event.targetName ? `**${clip(event.targetName, 80)}**` : null;
     switch (event.targetType) {
       case 'USER':
-        return event.targetId ? `${userMention(event.targetId)} (\`${event.targetId}\`)` : '*Bilinmiyor*';
+        return event.targetId ? userLabel(event.targetId, event.targetName) : '*Bilinmiyor*';
       case 'ROLE':
         return [name, event.targetId ? `\`${event.targetId}\`` : null].filter(Boolean).join(' ') || '*Bilinmiyor*';
       case 'GUILD':
@@ -113,6 +113,14 @@ export class GuardReporter {
       default:
         return [name, event.targetId ? `\`${event.targetId}\`` : null].filter(Boolean).join(' ') || '*Bilinmiyor*';
     }
+  }
+
+  /** Where Guard learned about the event: the audit log, a Biri command, or only the gateway. */
+  private sourceText(event: NormalizedSecurityEvent): string {
+    if (event.auditEntryId) return `Denetim kaydı \`${event.auditEntryId}\``;
+    const command = event.details.viaCommand;
+    if (typeof command === 'string') return `Biri komutu \`${command}\``;
+    return 'Gateway olayı';
   }
 
   private executorText(event: NormalizedSecurityEvent): string {
@@ -154,10 +162,9 @@ export class GuardReporter {
         value: '❔ Sorumlu kişi denetim kaydından güvenilir şekilde belirlenemedi. **Otomatik yaptırım uygulanmadı.**',
       });
     }
-    embed.addFields({
-      name: 'Kaynak',
-      value: `${event.auditEntryId ? `Denetim kaydı \`${event.auditEntryId}\`` : 'Gateway olayı'} • ${formatDateTime(event.occurredAt)}`,
-    });
+    const reason = event.details.reason;
+    if (typeof reason === 'string' && reason.length > 0) embed.addFields({ name: 'Sebep', value: clip(reason, 512) });
+    embed.addFields({ name: 'Kaynak', value: `${this.sourceText(event)} • ${formatDateTime(event.occurredAt)}` });
     if (decision.reason === 'AUTO_STRIP_DISABLED') {
       embed.setDescription('Eşik aşıldı ancak bu modülde otomatik rol alma kapalı.');
     }
@@ -222,7 +229,7 @@ export class GuardReporter {
     }
     embed.addFields({
       name: 'Olay Kimliği',
-      value: `${outcome.incidentId ? `\`${outcome.incidentId}\`` : '—'}${report.event.auditEntryId ? ` • Denetim kaydı \`${report.event.auditEntryId}\`` : ''}`,
+      value: `${outcome.incidentId ? `\`${outcome.incidentId}\`` : '—'} • ${this.sourceText(report.event)}`,
     });
     if (outcome.action === 'ROLES_STRIPPED' || outcome.action === 'PARTIAL') {
       embed.setFooter({ text: `Biri • Rolleri geri vermek için: /guard-iade` });

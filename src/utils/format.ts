@@ -34,6 +34,11 @@ export function userMention(id: string | null | undefined): string {
   return id ? `<@${id}>` : '*Bilinmiyor*';
 }
 
+/** `<@id> \`tag\` (\`id\`)` — stays readable in logs even when the mention cannot be resolved. */
+export function userLabel(id: string, tag?: string | null): string {
+  return `<@${id}>${tag ? ` \`${tag}\`` : ''} (\`${id}\`)`;
+}
+
 export function channelMention(id: string): string {
   return `<#${id}>`;
 }

@@ -11,14 +11,12 @@ import type {
   VoiceState,
 } from 'discord.js';
 import { COLORS } from '../../config/constants';
-import { clip, discordTimestamp } from '../../utils/format';
+import { clip, discordTimestamp, userLabel as who } from '../../utils/format';
 import type { Logger } from '../../utils/logger';
 import type { LogAvailability, LogSink } from './AuditLogFeed';
 import { brandEmbed } from './embeds';
 
 const NEW_ACCOUNT_MS = 7 * 24 * 60 * 60 * 1000;
-
-const who = (id: string, tag?: string | null) => `<@${id}>${tag ? ` \`${tag}\`` : ''} (\`${id}\`)`;
 
 /**
  * Logs activity that has no audit log entry: voice joins/leaves/moves,

@@ -300,7 +300,17 @@ export class FakeGuild {
   id = nextSnowflake();
   name = 'Test Sunucusu';
   ownerId: string;
-  client = { user: { id: BOT_ID } };
+  /** Ids `users.fetch` rejects with Unknown User, like deleted or mistyped accounts. */
+  unknownUserIds = new Set<string>();
+  client = {
+    user: { id: BOT_ID },
+    users: {
+      fetch: vi.fn(async (id: string) => {
+        if (this.unknownUserIds.has(id)) throw new DiscordError(RESTJSONErrorCodes.UnknownUser, 'Unknown User');
+        return { id, bot: false, tag: `kullanici${id.slice(-4)}`, username: `kullanici${id.slice(-4)}` };
+      }),
+    },
+  };
   failChannelCreate = false;
   failChannelDelete = false;
   rolesApiDown = false;
@@ -320,13 +330,19 @@ export class FakeGuild {
 
   fetchOwner = vi.fn(async () => this.members.cache.get(this.ownerId));
   bannedIds = new Set<string>();
+  banReasons = new Map<string, string>();
   bans = {
-    create: vi.fn(async (userId: string, _options?: { reason?: string }) => {
+    fetch: vi.fn(async (userId: string) => {
+      if (!this.bannedIds.has(userId)) throw new DiscordError(RESTJSONErrorCodes.UnknownBan, 'Unknown Ban');
+      return { user: { id: userId, tag: `kullanici${userId.slice(-4)}` }, reason: this.banReasons.get(userId) ?? null };
+    }),
+    create: vi.fn(async (userId: string, options?: { reason?: string }) => {
       const member = this.members.cache.get(userId);
       if (member && member.roles.highest.position >= this.members.me.roles.highest.position) {
         throw new DiscordError(RESTJSONErrorCodes.MissingPermissions);
       }
       this.bannedIds.add(userId);
+      if (options?.reason) this.banReasons.set(userId, options.reason);
       this.members.cache.delete(userId);
       return userId;
     }),

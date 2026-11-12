@@ -5,7 +5,8 @@ import type { SlashCommand } from '../../types/command';
 const command: SlashCommand = {
   category: 'admin',
   data: new SlashCommandBuilder().setName('yardim').setDescription('Biri komutlarını listeler').setContexts(InteractionContextType.Guild),
-  async execute(interaction) {
+  async execute(interaction, app) {
+    const prefix = app.env.ENABLE_PREFIX_COMMANDS ? app.env.PREFIX : null;
     const embed = brandEmbed()
       .setTitle('📖 Biri • Komutlar')
       .setDescription('**➕・Oda Oluştur** kanalına katılarak kendi ses odanı oluşturabilirsin. Odanı **🎛️・oda-paneli** kanalındaki düğmelerle de yönetebilirsin.')
@@ -47,6 +48,12 @@ const command: SlashCommand = {
             '`/kick` — Sunucudan at',
             '`/unban` — Yasağı kaldır (yasaklılar listesinden seç)',
             '`/nuke` — Kanalı sıfırla (tüm mesajları siler, onay ister)',
+            ...(prefix
+              ? [
+                  `\`${prefix}yargi <ID> [sebep]\` — ID ile yasakla (sebep isteğe bağlı)`,
+                  `\`${prefix}unyargı <ID> [sebep]\` — Yargıyı (yasağı) kaldır`,
+                ]
+              : []),
           ].join('\n'),
         },
         {

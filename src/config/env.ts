@@ -31,6 +31,16 @@ const envSchema = z.object({
     .default('true')
     .transform((value) => value === 'true' || value === '1' || value === 'yes'),
 
+  /** Enables the `.yargi` / `.unyargı` prefix commands. Requires the privileged Message Content intent. */
+  ENABLE_PREFIX_COMMANDS: booleanFlag,
+  /** Must not be `/`, which Discord reserves for slash commands. */
+  PREFIX: z
+    .string()
+    .trim()
+    .min(1)
+    .max(5)
+    .refine((value) => !value.startsWith('/') && !/\s/.test(value), "PREFIX '/' ile başlayamaz ve boşluk içeremez")
+    .default('.'),
   /** Logs deleted/edited messages. Requires the privileged Message Content intent. */
   ENABLE_MESSAGE_LOGS: booleanFlag,
 

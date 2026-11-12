@@ -6,10 +6,11 @@ import {
   type GuildMember,
   type NewsChannel,
   type TextChannel,
+  type User,
 } from 'discord.js';
 import { COLORS } from '../../config/constants';
 import { describeError, discordErrorCode } from '../../utils/discordErrors';
-import { clip, userMention } from '../../utils/format';
+import { clip, formatDuration, userLabel, userMention } from '../../utils/format';
 import type { Logger } from '../../utils/logger';
 import type { SecurityEventProcessor } from '../guard/SecurityEventProcessor';
 import { brandEmbed } from '../logging/embeds';
@@ -75,6 +76,14 @@ export interface ModerationRequest {
   invocationId: string;
   /** Ban only: how many seconds of the user's recent messages to delete (0–604800). */
   deleteMessageSeconds?: number;
+  /** How the moderator invoked it, as typed (`/ban`, `.yargi`). Shown in logs and Guard reports. */
+  command?: string;
+}
+
+function deletionWindow(seconds: number): string {
+  if (seconds % 86_400 === 0) return `Son ${seconds / 86_400} gün`;
+  if (seconds % 3_600 === 0) return `Son ${seconds / 3_600} saat`;
+  return `Son ${formatDuration(seconds)}`;
 }
 
 /**
@@ -109,6 +118,15 @@ export class ModerationService {
 
     const target = guild.members.cache.get(targetId) ?? (await guild.members.fetch(targetId).catch(() => null));
     if (!target && action === 'KICK') return fail('Bu kullanıcı sunucuda değil.');
+    // Banning by id: make sure the account exists before it counts towards Guard thresholds.
+    let user: User | null = target?.user ?? null;
+    if (!user) {
+      try {
+        user = await guild.client.users.fetch(targetId);
+      } catch (error) {
+        if (discordErrorCode(error) === RESTJSONErrorCodes.UnknownUser) return fail(`\`${targetId}\` kimliğine sahip bir Discord kullanıcısı bulunamadı.`);
+      }
+    }
     if (target) {
       const isOwner = moderator.id === guild.ownerId;
       if (!isOwner && target.roles.highest.position >= moderator.roles.highest.position) {
@@ -124,10 +142,10 @@ export class ModerationService {
     const guard = await this.processor
       .processCommandAction(guild, {
         module: spec.module,
-        command: action === 'BAN' ? 'ban' : 'kick',
+        command: request.command ?? (action === 'BAN' ? '/ban' : '/kick'),
         executorId: moderator.id,
         targetId,
-        targetName: target?.user.tag ?? null,
+        targetName: user?.tag ?? null,
         reason: reasonText,
         dedupeId: `cmd:${request.invocationId}`,
       })
@@ -150,22 +168,40 @@ export class ModerationService {
         .catch(() => undefined);
     }
 
+    const deleteSeconds = action === 'BAN' ? (request.deleteMessageSeconds ?? 0) : 0;
     try {
-      if (action === 'BAN') await guild.bans.create(targetId, { reason: auditReason, deleteMessageSeconds: request.deleteMessageSeconds ?? 0 });
+      if (action === 'BAN') await guild.bans.create(targetId, { reason: auditReason, deleteMessageSeconds: deleteSeconds });
       else await target!.kick(auditReason);
     } catch (error) {
       return fail(`İşlem başarısız: ${describeError(error)}`);
     }
 
-    const text = `${spec.emoji} ${userMention(targetId)} ${spec.past}.\n**Yetkili:** ${userMention(moderator.id)}\n**Sebep:** ${reasonText ?? 'Belirtilmedi'}`;
-    this.logSink?.(
+    const lines = [
+      `**Kullanıcı:** ${userLabel(targetId, user?.tag)}`,
+      `**Yetkili:** ${userLabel(moderator.id, moderator.user.tag)}`,
+      `**Sebep:** ${reasonText ?? 'Belirtilmedi'}`,
+    ];
+    if (action === 'BAN' && !target) lines.push('**Not:** Kullanıcı sunucuda değildi, kimliğiyle yasaklandı.');
+    if (deleteSeconds > 0) lines.push(`**Silinen mesajlar:** ${deletionWindow(deleteSeconds)}`);
+    this.log(
       guild.id,
       brandEmbed(action === 'BAN' ? COLORS.critical : COLORS.warning)
         .setTitle(action === 'BAN' ? '🔨 Üye Yasaklandı' : '👢 Üye Atıldı')
-        .setDescription(`${text}\n**Kullanıcı ID:** \`${targetId}\``),
-      'MEMBER',
+        .setDescription(lines.join('\n')),
+      user,
+      request.command,
     );
-    return { ok: true, message: text };
+    return {
+      ok: true,
+      message: `${spec.emoji} ${userMention(targetId)}${user ? ` \`${user.tag}\`` : ''} ${spec.past}.\n**Yetkili:** ${userMention(moderator.id)}\n**Sebep:** ${reasonText ?? 'Belirtilmedi'}`,
+    };
+  }
+
+  private log(guildId: string, embed: EmbedBuilder, user: User | null, command: string | undefined, kind: ModerationLogKind = 'MEMBER'): void {
+    const avatar = user?.displayAvatarURL?.();
+    if (avatar) embed.setThumbnail(avatar);
+    if (command) embed.setFooter({ text: `Biri • Komut: ${command}` });
+    this.logSink?.(guildId, embed, kind);
   }
 
   /** Lifting a ban is not a destructive action, so it is logged but not counted by Guard. */
@@ -173,6 +209,10 @@ export class ModerationService {
     const { guild, moderator, targetId } = request;
     if (!moderator.permissions.has(PermissionFlagsBits.BanMembers)) return fail('Bu komut için **Üyeleri Yasakla** yetkin yok.');
     if (!guild.members.me?.permissions.has(PermissionFlagsBits.BanMembers)) return fail(botPermissionHint('Üyeleri Yasakla'));
+
+    // Looked up first so the log can name the user and show why they were banned.
+    const ban = await guild.bans.fetch(targetId).catch((error: unknown) => (discordErrorCode(error) === RESTJSONErrorCodes.UnknownBan ? ('NOT_BANNED' as const) : null));
+    if (ban === 'NOT_BANNED') return fail(`${userMention(targetId)} (\`${targetId}\`) yasaklı değil.`);
 
     const reasonText = request.reason?.trim() || null;
     try {
@@ -182,16 +222,17 @@ export class ModerationService {
       return fail(`İşlem başarısız: ${describeError(error)}`);
     }
 
-    const text = `✅ ${userMention(targetId)} kullanıcısının yasağı kaldırıldı.
-**Yetkili:** ${userMention(moderator.id)}
-**Sebep:** ${reasonText ?? 'Belirtilmedi'}`;
-    this.logSink?.(
-      guild.id,
-      brandEmbed(COLORS.success).setTitle('✅ Yasak Kaldırıldı').setDescription(`${text}
-**Kullanıcı ID:** \`${targetId}\``),
-      'MEMBER',
-    );
-    return { ok: true, message: text };
+    const lines = [
+      `**Kullanıcı:** ${userLabel(targetId, ban?.user.tag)}`,
+      `**Yetkili:** ${userLabel(moderator.id, moderator.user.tag)}`,
+      `**Sebep:** ${reasonText ?? 'Belirtilmedi'}`,
+    ];
+    if (ban?.reason) lines.push(`**Yasaklanma sebebi:** ${clip(ban.reason, 300)}`);
+    this.log(guild.id, brandEmbed(COLORS.success).setTitle('✅ Yasak Kaldırıldı').setDescription(lines.join('\n')), ban?.user ?? null, request.command);
+    return {
+      ok: true,
+      message: `✅ ${userMention(targetId)}${ban ? ` \`${ban.user.tag}\`` : ''} kullanıcısının yasağı kaldırıldı.\n**Yetkili:** ${userMention(moderator.id)}\n**Sebep:** ${reasonText ?? 'Belirtilmedi'}`,
+    };
   }
 
   /**
@@ -209,7 +250,7 @@ export class ModerationService {
     const guard = await this.processor
       .processCommandAction(guild, {
         module: 'CHANNEL_DELETE',
-        command: 'nuke',
+        command: '/nuke',
         executorId: moderator.id,
         targetId: channel.id,
         targetType: 'CHANNEL',
@@ -256,11 +297,16 @@ export class ModerationService {
       .catch(() => undefined);
 
     const text = `💥 **#${channel.name}** kanalı sıfırlandı → ${fresh.toString()}\n**Yetkili:** ${userMention(moderator.id)}\n**Sebep:** ${reasonText ?? 'Belirtilmedi'}`;
-    this.logSink?.(
+    this.log(
       guild.id,
       brandEmbed(COLORS.critical)
-        .setTitle('💥 Kanal Nuke')
-        .setDescription(`${text}\n**Eski kanal ID:** \`${channel.id}\`\n**Yeni kanal ID:** \`${fresh.id}\``),
+        .setTitle('💥 Kanal Sıfırlandı (Nuke)')
+        .setDescription(
+          `**Kanal:** ${fresh.toString()} \`#${channel.name}\`\n**Yetkili:** ${userLabel(moderator.id, moderator.user.tag)}\n**Sebep:** ${reasonText ?? 'Belirtilmedi'}\n` +
+            `**Eski kanal ID:** \`${channel.id}\`\n**Yeni kanal ID:** \`${fresh.id}\``,
+        ),
+      null,
+      '/nuke',
       'CHANNEL',
     );
     return { ok: true, message: text, channel: fresh };

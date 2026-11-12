@@ -84,7 +84,7 @@ Biri'nin kendi işlemleri (oda açma/kapama, `/ban` vb.) tekrar loglanmaz; ilgil
 3. Sol menüden **Bot** sekmesine gidin:
    - **Reset Token** → token'ı kopyalayın → `.env` içindeki `DISCORD_TOKEN`. *Token'ı kimseyle paylaşmayın.*
    - **Privileged Gateway Intents**:
-     - *Message Content Intent*: silinen/düzenlenen mesaj loglarını istiyorsanız **açın** ve `ENABLE_MESSAGE_LOGS=true` yapın. İstemiyorsanız kapalı kalsın.
+     - *Message Content Intent*: `.yargi` / `.unyargı` prefix komutlarını (`ENABLE_PREFIX_COMMANDS=true`) ya da silinen/düzenlenen mesaj loglarını (`ENABLE_MESSAGE_LOGS=true`) kullanacaksanız **açın**. İkisini de kullanmayacaksanız kapalı kalsın.
      - *Server Members Intent*: isteğe bağlıdır. Açarsanız `.env` içinde `ENABLE_GUILD_MEMBERS_INTENT=true` yapın. Üye katılma/ayrılma logları ve atma (kick) olayları için ek doğrulama sağlar.
      - *Presence Intent*: kapalı kalsın.
    - **Public Bot** seçeneğini, botu yalnızca siz ekleyecekseniz kapatabilirsiniz.
@@ -230,11 +230,15 @@ Komutlar yalnızca ilgili yetkiye sahip üyelerin `/` menüsünde görünür.
 | `/ban kullanici [sebep] [mesaj-sil]` | Üyeleri Yasakla | Sunucudan yasaklar. Sunucuda olmayan biri de ID ile seçilebilir. `mesaj-sil`: son 1 saat – 7 güne kadar mesajlarını da siler. |
 | `/kick kullanici [sebep]` | Üyeleri At | Sunucudan atar. |
 | `/unban kullanici [sebep]` | Üyeleri Yasakla | Yasağı kaldırır. Yazmaya başlayınca yasaklılar listesi açılır. Banı kaldırmak saldırı sayılmaz, Guard'a işlenmez. |
+| `.yargi <ID \| @kullanıcı> [sebep]` | Üyeleri Yasakla | `/ban` ile aynı işi yapan prefix komutu. Sunucuda olmayan biri de ID ile yargılanabilir; sebep yazmak zorunlu değildir. `.yargı` olarak da yazılabilir. |
+| `.unyargı <ID \| @kullanıcı> [sebep]` | Üyeleri Yasakla | Yargıyı (yasağı) kaldırır; sebep isteğe bağlıdır. `.unyargi` olarak da yazılabilir. |
 | `/nuke [kanal] [sebep]` | Kanalları Yönet | Kanalı sıfırlar: aynı ad, konu, izin ve konumla kopyalar, eskisini tüm mesajlarıyla siler. Onay düğmesi ister. Log ve oda paneli kanallarında çalışmaz. Guard'a kanal silme olarak işlenir; toplu nuke engellenir. |
 
+- **Prefix komutları** varsayılan olarak kapalıdır. Açmak için `.env` içinde `ENABLE_PREFIX_COMMANDS=true` yapın ve Developer Portal'da **Message Content Intent**'i açın. Önek `PREFIX` ile değiştirilebilir (varsayılan `.`). Yetkisi olmayan üyelerin yazdığı `.yargi` mesajları sessizce yok sayılır.
+- Log kaydında kullanıcı etiketi ve kimliği, yetkili, sebep ve kullanılan komut görünür. Yasak kaldırılırken kişinin neden yasaklandığı da eklenir.
 - Rol hiyerarşisi uygulanır: kendinizle aynı veya daha yüksek roldeki birini, sunucu sahibini ya da kendinizi banlayamazsınız.
 - Hedef kişiye mümkünse sebebi içeren bir DM gönderilir. Denetim kaydına `Yetkili (ID): sebep` yazılır.
-- **Guard koruması:** Ban bot üzerinden yapıldığı için Discord'un denetim kaydında yapan kişi olarak bot görünür. Biri bu yüzden her `/ban`/`/kick` işlemini komutu yazan moderatöre işler. Aktif modda moderatör eşiği aşarsa (varsayılan 15 saniyede 3 ban) son işlem **engellenir** ve moderatörün rolleri alınır.
+- **Guard koruması:** Ban bot üzerinden yapıldığı için Discord'un denetim kaydında yapan kişi olarak bot görünür. Biri bu yüzden her `/ban`/`/kick`/`.yargi` işlemini komutu yazan moderatöre işler. Aktif modda moderatör eşiği aşarsa (varsayılan 15 saniyede 3 ban) son işlem **engellenir** ve moderatörün rolleri alınır.
 
 ### Diğer
 

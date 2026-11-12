@@ -51,7 +51,7 @@ const command: SlashCommand = {
     const id = /^<@!?(\d{17,20})>$/.exec(raw)?.[1] ?? /^(\d{17,20})$/.exec(raw)?.[1];
     if (!id) return replyError(interaction, 'Listeden bir kullanıcı seçin veya geçerli bir kullanıcı ID’si yazın.');
     forgetBans(interaction.guildId);
-    await runModeration(interaction, app, { action: 'UNBAN', targetId: id, reason: interaction.options.getString('sebep') }, '✅ Yasak Kaldırıldı');
+    await runModeration(interaction, app, { action: 'UNBAN', command: '/unban', targetId: id, reason: interaction.options.getString('sebep') }, '✅ Yasak Kaldırıldı');
   },
   autocomplete: suggestBans,
 };
