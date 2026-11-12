@@ -52,6 +52,7 @@ const command: SlashCommand = {
               ? [
                   `\`${prefix}yargi <ID> [sebep]\` — ID ile yasakla (sebep isteğe bağlı)`,
                   `\`${prefix}unyargı <ID> [sebep]\` — Yargıyı (yasağı) kaldır`,
+                  `\`${prefix}yargılar\` — Yargılı kullanıcı listesi`,
                 ]
               : []),
           ].join('\n'),

@@ -17,6 +17,8 @@ import type {
   SecurityEventCreate,
   TempVoiceConfigInput,
   TempVoiceRepository,
+  YargiRecord,
+  YargiRepository,
 } from './types';
 
 /** Serializable transactions may abort under contention; those are safe to retry. */
@@ -338,6 +340,36 @@ class PrismaCommandAuditRepository implements CommandAuditRepository {
   }
 }
 
+class PrismaYargiRepository implements YargiRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async upsert(entry: Parameters<YargiRepository['upsert']>[0]): Promise<void> {
+    const { guildId, userId, userTag, moderatorId, reason } = entry;
+    await this.prisma.yargiRecord.upsert({
+      where: { guildId_userId: { guildId, userId } },
+      create: { guildId, userId, userTag, moderatorId, reason },
+      update: { userTag: userTag ?? undefined, moderatorId, reason },
+    });
+  }
+
+  async remove(guildId: string, userId: string): Promise<boolean> {
+    const { count } = await this.prisma.yargiRecord.deleteMany({ where: { guildId, userId } });
+    return count > 0;
+  }
+
+  find(guildId: string, userId: string): Promise<YargiRecord | null> {
+    return this.prisma.yargiRecord.findUnique({ where: { guildId_userId: { guildId, userId } } });
+  }
+
+  list(guildId: string): Promise<YargiRecord[]> {
+    return this.prisma.yargiRecord.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' } });
+  }
+
+  async incrementReban(guildId: string, userId: string): Promise<void> {
+    await this.prisma.yargiRecord.updateMany({ where: { guildId, userId }, data: { rebanCount: { increment: 1 } } });
+  }
+}
+
 export function createPrismaRepositories(prisma: PrismaClient): Repositories {
   return {
     guilds: new PrismaGuildRepository(prisma),
@@ -345,5 +377,6 @@ export function createPrismaRepositories(prisma: PrismaClient): Repositories {
     guard: new PrismaGuardRepository(prisma),
     logChannels: new PrismaLogChannelRepository(prisma),
     commandAudit: new PrismaCommandAuditRepository(prisma),
+    yargi: new PrismaYargiRepository(prisma),
   };
 }

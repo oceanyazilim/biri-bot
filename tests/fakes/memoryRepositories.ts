@@ -27,6 +27,8 @@ import type {
   TempVoiceRepository,
   TempVoiceRoom,
   TrustedExecutor,
+  YargiRecord,
+  YargiRepository,
 } from '../../src/database/repositories/types';
 
 let sequence = 0;
@@ -316,10 +318,40 @@ export class MemoryLogChannelRepository implements LogChannelRepository {
   }
 }
 
+export class MemoryYargiRepository implements YargiRepository {
+  rows: YargiRecord[] = [];
+  async upsert(entry: Parameters<YargiRepository['upsert']>[0]) {
+    const existing = this.rows.find((r) => r.guildId === entry.guildId && r.userId === entry.userId);
+    if (existing) {
+      Object.assign(existing, { userTag: entry.userTag ?? existing.userTag, moderatorId: entry.moderatorId, reason: entry.reason, updatedAt: new Date() });
+      return;
+    }
+    const now = new Date();
+    this.rows.push({ id: nextId(), guildId: entry.guildId, userId: entry.userId, userTag: entry.userTag, moderatorId: entry.moderatorId, reason: entry.reason, rebanCount: 0, createdAt: now, updatedAt: now });
+  }
+  async remove(guildId: string, userId: string) {
+    const before = this.rows.length;
+    this.rows = this.rows.filter((r) => !(r.guildId === guildId && r.userId === userId));
+    return this.rows.length < before;
+  }
+  async find(guildId: string, userId: string) {
+    const row = this.rows.find((r) => r.guildId === guildId && r.userId === userId);
+    return row ? { ...row } : null;
+  }
+  async list(guildId: string) {
+    return this.rows.filter((r) => r.guildId === guildId).map((r) => ({ ...r }));
+  }
+  async incrementReban(guildId: string, userId: string) {
+    const row = this.rows.find((r) => r.guildId === guildId && r.userId === userId);
+    if (row) row.rebanCount++;
+  }
+}
+
 export function createMemoryRepositories(): Repositories & {
   tempVoice: MemoryTempVoiceRepository;
   guard: MemoryGuardRepository;
   logChannels: MemoryLogChannelRepository;
+  yargi: MemoryYargiRepository;
 } {
   const guilds: GuildRepository = { ensure: async () => undefined, markLeft: async () => undefined };
   const commandAudit: CommandAuditRepository = { record: async () => undefined };
@@ -329,5 +361,6 @@ export function createMemoryRepositories(): Repositories & {
     guard: new MemoryGuardRepository(),
     logChannels: new MemoryLogChannelRepository(),
     commandAudit,
+    yargi: new MemoryYargiRepository(),
   };
 }

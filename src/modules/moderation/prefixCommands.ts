@@ -1,9 +1,9 @@
 import type { Message } from 'discord.js';
 import { forgetBans } from '../../commands/moderation/unban';
 import type { App } from '../../core/App';
-import { clip } from '../../utils/format';
-import { errorEmbed, successEmbed, warningEmbed } from '../logging/embeds';
-import type { ModerationAction } from './ModerationService';
+import { clip, discordTimestamp, userLabel } from '../../utils/format';
+import { brandEmbed, errorEmbed, successEmbed, warningEmbed } from '../logging/embeds';
+import type { ModerationAction, ModerationResult } from './ModerationService';
 import { parsePrefixCommand, parseUserId } from './prefixParser';
 
 const PREFIX_COOLDOWN_MS = 2_000;
@@ -13,7 +13,7 @@ const DENIED_WARNING_COOLDOWN_MS = 10_000;
 export const NOT_ALLOWED_MESSAGE = 'Size bu yetki tanınmadı, lütfen denemeyiniz.';
 
 interface PrefixCommand {
-  action: ModerationAction;
+  action: ModerationAction | 'LIST';
   usage: string;
   title: string;
 }
@@ -22,7 +22,10 @@ interface PrefixCommand {
 export const PREFIX_COMMANDS: Record<string, PrefixCommand> = {
   yargi: { action: 'BAN', usage: 'yargi <ID | @kullanıcı> [sebep]', title: '⚖️ Yargılandı' },
   unyargi: { action: 'UNBAN', usage: 'unyargı <ID | @kullanıcı> [sebep]', title: '✅ Yargı Kaldırıldı' },
+  yargilar: { action: 'LIST', usage: 'yargılar', title: '⚖️ Yargı Listesi' },
 };
+
+const LIST_LIMIT = 25;
 
 /**
  * Handles `.yargi` / `.unyargı`. Only users listed in YARGI_ALLOWED_USER_IDS may
@@ -61,6 +64,23 @@ export async function handlePrefixMessage(app: App, message: Message<true>): Pro
   const moderator = message.member ?? (await message.guild.members.fetch(message.author.id).catch(() => null));
   if (!moderator) return;
 
+  if (command.action === 'LIST') {
+    const records = await app.yargi.list(message.guildId);
+    const lines = records
+      .slice(0, LIST_LIMIT)
+      .map((r) => `• ${userLabel(r.userId, r.userTag)} — ${clip(r.reason ?? 'Sebep yok', 60)} • ${discordTimestamp(r.createdAt, 'd')}${r.rebanCount > 0 ? ` • 🔁 ${r.rebanCount}` : ''}`);
+    const more = records.length > LIST_LIMIT ? `\n…ve **${records.length - LIST_LIMIT}** kişi daha.` : '';
+    await reply(
+      brandEmbed()
+        .setTitle(`${command.title} (${records.length})`)
+        .setDescription(lines.length > 0 ? clip(lines.join('\n') + more, 4000) : 'Yargı listesi boş.')
+        .setFooter({ text: 'Biri • Listedekiler .unyargı yapılana kadar her seferinde tekrar yasaklanır' }),
+    );
+    await audit(true, {}, null);
+    return;
+  }
+  const action = command.action;
+
   const targetId = parseUserId(parsed.args[0]);
   if (!targetId) {
     await reply(errorEmbed(`Kullanım: \`${prefix}${command.usage}\`\nSebep yazmak zorunlu değildir.`, '❔ Eksik veya geçersiz kullanıcı'));
@@ -76,15 +96,34 @@ export async function handlePrefixMessage(app: App, message: Message<true>): Pro
   let errorText: string | null = null;
   try {
     forgetBans(message.guildId);
-    const result = await app.moderation.execute({
-      action: command.action,
+    const request = {
+      action,
       guild: message.guild,
       moderator,
       targetId,
       reason: reason ? clip(reason, 400) : null,
       invocationId: message.id,
       command: label,
-    });
+    };
+    let result: ModerationResult;
+    if (action === 'UNBAN') {
+      // Off the list first, otherwise lifting the ban would trigger an immediate re-ban.
+      const released = await app.yargi.release(message.guildId, targetId);
+      result = await app.moderation.execute(request);
+      if (!result.ok && released) {
+        if (result.notBanned) result = { ok: true, message: `✅ ${userLabel(targetId, released.userTag)} yargı listesinden çıkarıldı (zaten yasaklı değildi).` };
+        else await app.yargi.restore(released);
+      } else if (result.ok && !released) {
+        result = { ...result, message: `${result.message}\n*Not: Bu kullanıcı yargı listesinde değildi.*` };
+      }
+    } else {
+      result = await app.moderation.execute(request);
+      if (result.ok) {
+        const user = await message.guild.client.users.fetch(targetId).catch(() => null);
+        await app.yargi.record({ guildId: message.guildId, userId: targetId, userTag: user?.tag ?? null, moderatorId: moderator.id, reason: request.reason });
+        result = { ...result, message: `${result.message}\n⚖️ Yargı listesine eklendi: \`${prefix}unyargı\` yapılana kadar her girişinde tekrar yasaklanır.` };
+      }
+    }
     success = result.ok;
     if (!result.ok) errorText = result.message;
     await reply(result.ok ? successEmbed(result.message, command.title) : errorEmbed(result.message));

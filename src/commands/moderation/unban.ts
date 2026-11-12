@@ -50,6 +50,14 @@ const command: SlashCommand = {
     const raw = interaction.options.getString('kullanici', true).trim();
     const id = /^<@!?(\d{17,20})>$/.exec(raw)?.[1] ?? /^(\d{17,20})$/.exec(raw)?.[1];
     if (!id) return replyError(interaction, 'Listeden bir kullanıcı seçin veya geçerli bir kullanıcı ID’si yazın.');
+    const judged = await app.yargi.find(interaction.guildId, id);
+    if (judged) {
+      return replyError(
+        interaction,
+        `⚖️ ${`<@${id}>`} yargılı bir kullanıcı; yasağı \`/unban\` ile kaldırılamaz, kaldırılsa bile Biri tekrar yasaklar.\n` +
+          'Yargıyı yalnızca yetkili kişiler **`.unyargı`** komutuyla kaldırabilir.',
+      );
+    }
     forgetBans(interaction.guildId);
     await runModeration(interaction, app, { action: 'UNBAN', command: '/unban', targetId: id, reason: interaction.options.getString('sebep') }, '✅ Yasak Kaldırıldı');
   },

@@ -1,4 +1,4 @@
-import { Collection, GatewayIntentBits, PermissionFlagsBits, type AutocompleteInteraction, type ChatInputCommandInteraction, type GuildMember, type Message } from 'discord.js';
+import { AuditLogEvent, Collection, GatewayIntentBits, PermissionFlagsBits, type AutocompleteInteraction, type ChatInputCommandInteraction, type GuildMember, type Message } from 'discord.js';
 import { describe, expect, it, vi } from 'vitest';
 import type { App } from '../src/core/App';
 import { ModerationService, type ModerationAction, type NukeableChannel } from '../src/modules/moderation/ModerationService';
@@ -10,8 +10,10 @@ import { gatewayIntents } from '../src/core/createApp';
 import { buildEventList } from '../src/events';
 import { handlePrefixMessage } from '../src/modules/moderation/prefixCommands';
 import { parsePrefixCommand } from '../src/modules/moderation/prefixParser';
+import { YargiService } from '../src/modules/moderation/YargiService';
 import { CooldownService } from '../src/services/CooldownService';
 import { createSilentLogger } from '../src/utils/logger';
+import type { Guild } from 'discord.js';
 import { asDiscord, BOT_ID, nextSnowflake, type FakeMember, type FakeTextChannel } from './fakes/discord';
 import { createGuardHarness, type GuardHarnessOptions } from './fakes/guardHarness';
 
@@ -156,7 +158,8 @@ describe('Guard sees bot-proxied moderation', () => {
 describe('slash commands', () => {
   async function slashHarness() {
     const h = await modHarness();
-    const app = asDiscord<App>({ moderation: h.moderation });
+    const yargi = new YargiService(h.repos.yargi, createSilentLogger());
+    const app = asDiscord<App>({ moderation: h.moderation, yargi });
     const invoke = async (command: typeof banCommand, options: Record<string, unknown>) => {
       const interaction = {
         id: nextSnowflake(),
@@ -180,7 +183,7 @@ describe('slash commands', () => {
       });
       return { interaction, thrown, text: JSON.stringify(interaction.editReply.mock.calls) };
     };
-    return { ...h, invoke };
+    return { ...h, yargi, invoke };
   }
 
   it('are registered with permission-gated menus', () => {
@@ -293,34 +296,37 @@ describe('nuke', () => {
   });
 });
 
-describe('prefix commands (.yargi / .unyargı)', () => {
-  async function prefixHarness(options: GuardHarnessOptions = {}) {
-    const h = await modHarness(options);
-    const logs: Array<{ kind: string; embed: { title?: string; description?: string; footer?: { text: string } } }> = [];
-    h.moderation.setLogSink((_guildId, embed, kind) => logs.push({ kind, embed: embed.toJSON() }));
-    const audit: Array<{ command: string; success: boolean; options: string }> = [];
-    const cooldowns = new CooldownService();
-    const env = { PREFIX: '.', YARGI_ALLOWED_USER_IDS: [] as string[] };
-    const app = asDiscord<App>({
-      env,
-      moderation: h.moderation,
-      cooldowns,
-      health: { increment: vi.fn() },
-      logger: createSilentLogger(),
-      repos: { commandAudit: { record: vi.fn(async (entry: (typeof audit)[number]) => void audit.push(entry)) } },
-    });
-    const say = async (content: string, by: FakeMember = h.moderator) => {
-      const reply = vi.fn(async (_payload: unknown) => undefined);
-      const message = { id: nextSnowflake(), content, guild: h.guild, guildId: h.guild.id, member: by, author: by.user, reply };
-      await handlePrefixMessage(app, asDiscord<Message<true>>(message));
-      return { reply, text: JSON.stringify(reply.mock.calls) };
-    };
-    /** A second moderator, so consecutive commands are not stopped by the per-user cooldown. */
-    const colleague = h.guild.addMember({ name: 'Yargıç', roles: [h.modRole] });
-    env.YARGI_ALLOWED_USER_IDS.push(h.moderator.id, colleague.id, h.guild.ownerId);
-    return { ...h, env, logs, audit, say, colleague };
-  }
+async function prefixHarness(options: GuardHarnessOptions = {}) {
+  const h = await modHarness(options);
+  const logs: Array<{ kind: string; embed: { title?: string; description?: string; footer?: { text: string } } }> = [];
+  h.moderation.setLogSink((_guildId, embed, kind) => logs.push({ kind, embed: embed.toJSON() }));
+  const audit: Array<{ command: string; success: boolean; options: string }> = [];
+  const cooldowns = new CooldownService();
+  const env = { PREFIX: '.', YARGI_ALLOWED_USER_IDS: [] as string[] };
+  const yargi = new YargiService(h.repos.yargi, createSilentLogger());
+  yargi.setLogSink((_guildId, embed) => logs.push({ kind: 'MEMBER', embed: embed.toJSON() }));
+  const app = asDiscord<App>({
+    env,
+    yargi,
+    moderation: h.moderation,
+    cooldowns,
+    health: { increment: vi.fn() },
+    logger: createSilentLogger(),
+    repos: { commandAudit: { record: vi.fn(async (entry: (typeof audit)[number]) => void audit.push(entry)) } },
+  });
+  const say = async (content: string, by: FakeMember = h.moderator) => {
+    const reply = vi.fn(async (_payload: unknown) => undefined);
+    const message = { id: nextSnowflake(), content, guild: h.guild, guildId: h.guild.id, member: by, author: by.user, reply };
+    await handlePrefixMessage(app, asDiscord<Message<true>>(message));
+    return { reply, text: JSON.stringify(reply.mock.calls) };
+  };
+  /** A second moderator, so consecutive commands are not stopped by the per-user cooldown. */
+  const colleague = h.guild.addMember({ name: 'Yargıç', roles: [h.modRole] });
+  env.YARGI_ALLOWED_USER_IDS.push(h.moderator.id, colleague.id, h.guild.ownerId);
+  return { ...h, env, yargi, logs, audit, say, colleague };
+}
 
+describe('prefix commands (.yargi / .unyargı)', () => {
   it('parses names case- and dotless-i-insensitively', () => {
     expect(parsePrefixCommand('.yargi 123 reklam yaptı', '.')).toEqual({ name: 'yargi', args: ['123', 'reklam', 'yaptı'] });
     expect(parsePrefixCommand('.YARGI 123', '.')?.name).toBe('yargi');
@@ -441,5 +447,116 @@ describe('prefix commands (.yargi / .unyargı)', () => {
     const names = (prefix: boolean) => buildEventList(false, false, prefix).map((event) => event.name);
     expect(names(true)).toContain('messageCreate');
     expect(names(false)).not.toContain('messageCreate');
+  });
+});
+
+describe('kalıcı yargı listesi', () => {
+  /** What Discord does when someone lifts a ban: the ban disappears and guildBanRemove fires. */
+  const liftBan = async (h: Awaited<ReturnType<typeof prefixHarness>>, userId: string, by: string | null = null) => {
+    h.guild.bannedIds.delete(userId);
+    if (by) h.guild.audit({ action: AuditLogEvent.MemberBanRemove, executorId: by, targetId: userId });
+    return h.yargi.enforce(asDiscord<Guild>(h.guild), userId, 'UNBAN');
+  };
+
+  it('.yargi puts the user on the list and .yargılar shows it', async () => {
+    const h = await prefixHarness();
+    const { text } = await h.say(`.yargi ${h.victim.id} reklam`);
+    expect(text).toContain('Yargı listesine eklendi');
+    expect(h.repos.yargi.rows).toEqual([expect.objectContaining({ userId: h.victim.id, moderatorId: h.moderator.id, reason: 'reklam' })]);
+    const list = await h.say('.yargılar', h.colleague);
+    expect(list.text).toContain('Yargı Listesi (1)');
+    expect(list.text).toContain(h.victim.id);
+    expect(list.text).toContain('reklam');
+  });
+
+  it('re-bans a judged user immediately when someone lifts the ban, and logs who did it', async () => {
+    const h = await prefixHarness();
+    await h.say(`.yargi ${h.victim.id} reklam`);
+    const admin = h.guild.addMember({ name: 'Admin' });
+    h.guild.botRole.permissions.bitfield |= PermissionFlagsBits.ViewAuditLog;
+
+    expect(await liftBan(h, h.victim.id, admin.id)).toBe(true);
+    expect(h.guild.bannedIds.has(h.victim.id)).toBe(true);
+    expect(h.guild.bans.create).toHaveBeenLastCalledWith(h.victim.id, { reason: expect.stringContaining('Yargı (kalıcı)') });
+    const log = h.logs.at(-1)!.embed;
+    expect(log.title).toContain('Tekrar Yasaklandı');
+    expect(log.description).toContain(`kaldıran: <@${admin.id}>`);
+    expect(log.description).toContain('1. kez');
+
+    await liftBan(h, h.victim.id);
+    expect(h.repos.yargi.rows[0]!.rebanCount).toBe(2);
+  });
+
+  it('bans a judged user who gets back into the server', async () => {
+    const h = await prefixHarness();
+    const outsider = nextSnowflake();
+    await h.say(`.yargi ${outsider}`);
+    h.guild.bannedIds.delete(outsider); // lifted while Biri was offline
+    expect(await h.yargi.enforce(asDiscord<Guild>(h.guild), outsider, 'JOIN')).toBe(true);
+    expect(h.guild.bannedIds.has(outsider)).toBe(true);
+    expect(h.logs.at(-1)!.embed.description).toContain('tekrar katıldı');
+  });
+
+  it('leaves users that were never judged alone', async () => {
+    const h = await prefixHarness();
+    expect(await h.yargi.enforce(asDiscord<Guild>(h.guild), h.victim.id, 'JOIN')).toBe(false);
+    expect(h.guild.bans.create).not.toHaveBeenCalled();
+  });
+
+  it('.unyargı takes the user off the list so lifting the ban sticks', async () => {
+    const h = await prefixHarness();
+    await h.say(`.yargi ${h.victim.id} reklam`);
+    expect((await h.say(`.unyargı ${h.victim.id}`, h.colleague)).text).toContain('Yargı Kaldırıldı');
+    expect(h.repos.yargi.rows).toHaveLength(0);
+    expect(h.guild.bannedIds.has(h.victim.id)).toBe(false);
+    expect(await h.yargi.enforce(asDiscord<Guild>(h.guild), h.victim.id, 'JOIN')).toBe(false);
+  });
+
+  it('.unyargı clears a judged user whose ban is already gone', async () => {
+    const h = await prefixHarness();
+    await h.say(`.yargi ${h.victim.id}`);
+    h.guild.bannedIds.delete(h.victim.id);
+    const { text } = await h.say(`.unyargı ${h.victim.id}`, h.colleague);
+    expect(text).toContain('yargı listesinden çıkarıldı');
+    expect(h.repos.yargi.rows).toHaveLength(0);
+  });
+
+  it('keeps the user on the list when the ban cannot be lifted', async () => {
+    const h = await prefixHarness();
+    await h.say(`.yargi ${h.victim.id}`);
+    h.guild.bans.remove.mockRejectedValueOnce(new Error('Discord kapalı'));
+    expect((await h.say(`.unyargı ${h.victim.id}`, h.colleague)).text).toContain('başarısız');
+    expect(h.repos.yargi.rows).toHaveLength(1);
+  });
+
+  it('reports when Biri lacks Ban Members instead of failing silently', async () => {
+    const h = await prefixHarness();
+    await h.say(`.yargi ${h.victim.id}`);
+    h.guild.botRole.permissions.bitfield &= ~PermissionFlagsBits.BanMembers;
+    expect(await liftBan(h, h.victim.id)).toBe(false);
+    expect(h.logs.at(-1)!.embed.title).toContain('Yasaklanamadı');
+  });
+
+  it('/unban refuses judged users and points to .unyargı', async () => {
+    const h = await modHarness();
+    const yargi = new YargiService(h.repos.yargi, createSilentLogger());
+    await yargi.record({ guildId: h.guild.id, userId: h.victim.id, userTag: null, moderatorId: h.moderator.id, reason: null });
+    h.guild.bannedIds.add(h.victim.id);
+    const reply = vi.fn(async (_payload: unknown) => undefined);
+    const interaction = {
+      id: nextSnowflake(),
+      guild: h.guild,
+      guildId: h.guild.id,
+      member: h.moderator,
+      deferred: false,
+      replied: false,
+      reply,
+      deferReply: vi.fn(),
+      editReply: vi.fn(),
+      options: { getString: (name: string) => (name === 'kullanici' ? h.victim.id : null) },
+    };
+    await unbanCommand.execute(asDiscord<ChatInputCommandInteraction<'cached'>>(interaction), asDiscord<App>({ moderation: h.moderation, yargi }));
+    expect(JSON.stringify(reply.mock.calls)).toContain('.unyargı');
+    expect(h.guild.bans.remove).not.toHaveBeenCalled();
   });
 });

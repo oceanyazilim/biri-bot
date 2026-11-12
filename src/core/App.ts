@@ -14,6 +14,7 @@ import type { AuditLogFeed } from '../modules/logging/AuditLogFeed';
 import type { LogChannelService } from '../modules/logging/LogChannelService';
 import type { LogDispatcher } from '../modules/logging/LogDispatcher';
 import type { ModerationService } from '../modules/moderation/ModerationService';
+import type { YargiService } from '../modules/moderation/YargiService';
 import type { RoomManager } from '../modules/tempVoice/RoomManager';
 import type { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import type { CooldownService } from '../services/CooldownService';
@@ -51,6 +52,7 @@ export interface App {
   reporter: GuardReporter;
 
   moderation: ModerationService;
+  yargi: YargiService;
 
   commands: Map<string, SlashCommand>;
   components: Map<string, ComponentHandler>;

@@ -23,6 +23,8 @@ export interface ModerationResult {
   message: string;
   /** The action was stopped because Guard sanctioned the moderator. */
   blockedByGuard?: boolean;
+  /** Unban only: the user was not banned. */
+  notBanned?: boolean;
 }
 
 interface ActionSpec {
@@ -212,13 +214,13 @@ export class ModerationService {
 
     // Looked up first so the log can name the user and show why they were banned.
     const ban = await guild.bans.fetch(targetId).catch((error: unknown) => (discordErrorCode(error) === RESTJSONErrorCodes.UnknownBan ? ('NOT_BANNED' as const) : null));
-    if (ban === 'NOT_BANNED') return fail(`${userMention(targetId)} (\`${targetId}\`) yasaklı değil.`);
+    if (ban === 'NOT_BANNED') return { ...fail(`${userMention(targetId)} (\`${targetId}\`) yasaklı değil.`), notBanned: true };
 
     const reasonText = request.reason?.trim() || null;
     try {
       await guild.bans.remove(targetId, clip(`${moderator.user.tag} (${moderator.id}): ${reasonText ?? 'Sebep belirtilmedi'}`, 512));
     } catch (error) {
-      if (discordErrorCode(error) === RESTJSONErrorCodes.UnknownBan) return fail(`${userMention(targetId)} (\`${targetId}\`) yasaklı değil.`);
+      if (discordErrorCode(error) === RESTJSONErrorCodes.UnknownBan) return { ...fail(`${userMention(targetId)} (\`${targetId}\`) yasaklı değil.`), notBanned: true };
       return fail(`İşlem başarısız: ${describeError(error)}`);
     }
 

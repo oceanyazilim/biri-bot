@@ -12,6 +12,7 @@ import type {
   TempVoiceConfig,
   TempVoiceRoom,
   TrustedExecutor,
+  YargiRecord,
 } from '@prisma/client';
 
 export type {
@@ -28,6 +29,7 @@ export type {
   TempVoiceConfig,
   TempVoiceRoom,
   TrustedExecutor,
+  YargiRecord,
 };
 
 export interface TempVoiceConfigInput {
@@ -193,10 +195,20 @@ export interface CommandAuditRepository {
   record(entry: { guildId: string; userId: string; command: string; options: string; success: boolean; error: string | null }): Promise<void>;
 }
 
+export interface YargiRepository {
+  /** Creates the record or refreshes it (moderator, reason) when the user is judged again. */
+  upsert(entry: { guildId: string; userId: string; userTag: string | null; moderatorId: string; reason: string | null }): Promise<void>;
+  remove(guildId: string, userId: string): Promise<boolean>;
+  find(guildId: string, userId: string): Promise<YargiRecord | null>;
+  list(guildId: string): Promise<YargiRecord[]>;
+  incrementReban(guildId: string, userId: string): Promise<void>;
+}
+
 export interface Repositories {
   guilds: GuildRepository;
   tempVoice: TempVoiceRepository;
   guard: GuardRepository;
   logChannels: LogChannelRepository;
   commandAudit: CommandAuditRepository;
+  yargi: YargiRepository;
 }

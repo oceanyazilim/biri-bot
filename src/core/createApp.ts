@@ -16,6 +16,7 @@ import { AuditLogFeed } from '../modules/logging/AuditLogFeed';
 import { LogChannelService } from '../modules/logging/LogChannelService';
 import { LogDispatcher } from '../modules/logging/LogDispatcher';
 import { ModerationService } from '../modules/moderation/ModerationService';
+import { YargiService } from '../modules/moderation/YargiService';
 import { RoomManager } from '../modules/tempVoice/RoomManager';
 import { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import { CooldownService } from '../services/CooldownService';
@@ -83,6 +84,8 @@ export function createApp(env: Env, logger: Logger): App {
   const processor = new SecurityEventProcessor({ config: guardConfig, trust, repo: repos.guard, incidents, reporter, logger: guardLogger, health });
   const moderation = new ModerationService(processor, logger.child({ module: 'moderation' }), selfActions);
   moderation.setLogSink((guildId, embed, kind) => logDispatcher.enqueue(guildId, kind, embed));
+  const yargi = new YargiService(repos.yargi, logger.child({ module: 'yargi' }));
+  yargi.setLogSink((guildId, embed) => logDispatcher.enqueue(guildId, 'MEMBER', embed));
   const guard = new GuardService(processor, correlator, guardConfig, repos.guard, logChannels, selfActions, guardLogger);
   guard.setFetchedEntryListener((guild, entry) => auditFeed.handle(guild, entry));
 
@@ -109,6 +112,7 @@ export function createApp(env: Env, logger: Logger): App {
     processor,
     reporter,
     moderation,
+    yargi,
     commands: buildCommandMap(),
     components: buildComponentMap(),
   };

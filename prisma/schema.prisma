@@ -271,3 +271,19 @@ model CommandAuditLog {
   @@index([guildId, createdAt])
   @@index([userId])
 }
+
+/// Users judged with `.yargi`: re-banned whenever their ban is lifted another way, until `.unyargı`.
+model YargiRecord {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  userTag     String?
+  moderatorId String
+  reason      String?
+  rebanCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+}

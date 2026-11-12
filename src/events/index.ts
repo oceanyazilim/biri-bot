@@ -7,7 +7,7 @@ import { messageDelete, messageDeleteBulk, messageUpdate } from './guild/message
 import ready from './guild/ready';
 import auditLogEntryCreate from './security/auditLogEntryCreate';
 import { channelCreate, channelDelete } from './security/channelEvents';
-import { guildBanAdd, guildMemberAdd, guildMemberRemove } from './security/memberEvents';
+import { guildBanAdd, guildBanRemove, guildMemberAdd, guildMemberRemove } from './security/memberEvents';
 import { roleCreate, roleDelete } from './security/roleEvents';
 import type { AnyBotEvent } from './types';
 import voiceStateUpdate from './voice/voiceStateUpdate';
@@ -25,6 +25,7 @@ export function buildEventList(membersIntent: boolean, messageLogs: boolean, pre
     roleDelete,
     roleCreate,
     guildBanAdd,
+    guildBanRemove,
   ];
   if (membersIntent) events.push(guildMemberRemove, guildMemberAdd);
   if (prefixCommands) events.push(messageCreate);
