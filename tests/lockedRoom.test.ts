@@ -28,18 +28,45 @@ async function lockedRoom() {
 }
 
 describe('locked rooms keep out everyone without permission', () => {
-  it('disconnects administrators and the server owner and warns them in the room chat', async () => {
+  it('sends administrators and the server owner to the creator channel and asks the owner in the room chat', async () => {
     const h = await lockedRoom();
     const admin = h.guild.addMember({ name: 'Yönetici', permissions: PermissionFlagsBits.Administrator });
     await h.move(admin, h.room.id);
-    expect(admin.voice.channelId).toBeNull();
-    expect(admin.voice.disconnect).toHaveBeenCalled();
-    expect(h.room.send).toHaveBeenCalledWith(expect.objectContaining({ allowedMentions: { users: [admin.id] } }));
+    expect(admin.voice.channelId).toBe(h.creator.id);
+    expect(admin.voice.disconnect).not.toHaveBeenCalled();
+    const warning = (h.room.send.mock.calls.at(-1) as unknown[])[0] as { allowedMentions: { users: string[] }; components: Array<{ toJSON(): { components: Array<{ custom_id: string }> } }> };
+    expect(warning.allowedMentions.users).toEqual([admin.id, h.owner.id]);
+    expect(warning.components[0]!.toJSON().components.map((c) => c.custom_id)).toEqual([
+      `biri:entry:allow:${h.room.id}:${admin.id}`,
+      `biri:entry:deny:${h.room.id}:${admin.id}`,
+    ]);
 
     const crown = h.guild.addMember({ name: 'Taç' });
     h.guild.ownerId = crown.id;
     await h.move(crown, h.room.id);
-    expect(crown.voice.channelId).toBeNull();
+    expect(crown.voice.channelId).toBe(h.creator.id);
+  });
+
+  it('opens a room of their own once they land in the creator channel', async () => {
+    const h = await lockedRoom();
+    const admin = h.guild.addMember({ name: 'Yönetici', permissions: PermissionFlagsBits.Administrator });
+    await h.move(admin, h.room.id);
+    // Deliver the gateway event for the bot's move into the creator channel.
+    await h.service.handleVoiceStateUpdate(
+      asDiscord({ channelId: h.room.id, member: admin, guild: h.guild }),
+      asDiscord({ channelId: h.creator.id, member: admin, guild: h.guild }),
+    );
+    expect(h.service.roomsOwnedBy(h.guild.id, admin.id)).toHaveLength(1);
+    expect(admin.voice.channelId).not.toBe(h.creator.id);
+    expect(admin.voice.channelId).not.toBe(h.room.id);
+  });
+
+  it('disconnects instead when the temp voice system is disabled', async () => {
+    const h = await lockedRoom();
+    h.guild.channels.cache.delete(h.creator.id);
+    const admin = h.guild.addMember({ name: 'Yönetici', permissions: PermissionFlagsBits.Administrator });
+    await h.move(admin, h.room.id);
+    expect(admin.voice.channelId).toBeNull();
   });
 
   it('lets the owner, allowed members and members inside at lock time stay', async () => {
@@ -103,7 +130,7 @@ describe('/sese-cek', () => {
     expect(guest.voice.channelId).toBe(h.room.id);
     await h.move(guest, null);
     await h.move(guest, h.room.id);
-    expect(guest.voice.channelId).toBeNull();
+    expect(guest.voice.channelId).toBe(h.creator.id);
   });
 
   it('refuses members who are not in voice, blocked members and the admin override', async () => {

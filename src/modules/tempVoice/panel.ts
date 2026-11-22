@@ -245,3 +245,19 @@ export function buildUserPicker(operation: UserOperation, channelId: string) {
     ],
   };
 }
+
+/** Buttons under the locked-room warning: the room owner admits or turns away the member. */
+export function buildEntryRequestButtons(channelId: string, userId: string) {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(customId('entry', 'allow', channelId, userId))
+      .setLabel('İzin Ver')
+      .setEmoji(icon('allow'))
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(customId('entry', 'deny', channelId, userId))
+      .setLabel('Reddet')
+      .setEmoji(icon('disallow'))
+      .setStyle(ButtonStyle.Danger),
+  );
+}

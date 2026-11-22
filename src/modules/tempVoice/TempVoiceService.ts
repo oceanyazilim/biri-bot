@@ -27,7 +27,7 @@ import type { Logger } from '../../utils/logger';
 import { TimerRegistry } from '../../utils/timers';
 import { brandEmbed } from '../logging/embeds';
 import { JoinTracker, pickSuccessor } from './JoinTracker';
-import { buildHubPanel, HUB_CHANNEL_NAME, LEGACY_HUB_CHANNEL_NAMES } from './panel';
+import { buildEntryRequestButtons, buildHubPanel, HUB_CHANNEL_NAME, LEGACY_HUB_CHANNEL_NAMES } from './panel';
 import { buildRoomName } from './roomNaming';
 import { computeRoomOverwrites, toOverwriteOptions, type BaseOverwrite, type RoomPermissionState } from './roomPermissions';
 
@@ -65,8 +65,8 @@ export type TransferResult =
 /** How long a `/sese-cek` pass stays valid; the move itself takes well under a second. */
 const ENTRY_PASS_TTL_MS = 30_000;
 const INTRUDER_WARNING_COOLDOWN_MS = 15_000;
-/** The warning posted in the room chat removes itself after this delay. */
-export const INTRUDER_WARNING_TTL_MS = 15_000;
+/** The warning (with the owner's İzin Ver / Reddet buttons) removes itself after this delay. */
+export const INTRUDER_WARNING_TTL_MS = 60_000;
 
 const REQUIRED_VOICE_PERMISSIONS: Array<[bigint, string]> = [
   [PermissionFlagsBits.ManageChannels, 'Kanalları Yönet'],
@@ -382,12 +382,25 @@ export class TempVoiceService {
     return false;
   }
 
-  /** Disconnects a member who entered a locked room without permission and warns them in the room chat. */
+  /**
+   * Moves a member who entered a locked room without permission to the creator
+   * channel, which opens a room of their own (or sends them back to the one they
+   * already have). Without a usable creator channel they are disconnected instead.
+   * Either way they are warned in the room chat.
+   */
   private async rejectIfNotAdmitted(guild: Guild, room: TempVoiceRoom, member: GuildMember): Promise<boolean> {
     const channel = this.voiceChannel(guild, room.channelId);
     if (!channel || this.isAdmitted(room, channel, member)) return false;
+    const config = await this.getConfig(guild.id);
+    const creator = config?.enabled ? this.voiceChannel(guild, config.creatorChannelId) : null;
+    let movedToCreator = false;
     try {
-      await member.voice.disconnect('Biri: kilitli odaya izinsiz giriş');
+      if (creator) {
+        await member.voice.setChannel(creator, 'Biri: kilitli odaya izinsiz giriş, kendi odasına yönlendirildi');
+        movedToCreator = true;
+      } else {
+        await member.voice.disconnect('Biri: kilitli odaya izinsiz giriş');
+      }
     } catch (error) {
       this.logger.warn({ err: error, channelId: channel.id, userId: member.id }, 'Kilitli odaya giren kullanıcı çıkarılamadı');
       return false;
@@ -398,18 +411,19 @@ export class TempVoiceService {
       this.intruderWarnings.set(warnKey, true);
       const warning = await channel
         .send({
-          content: userMention(member.id),
+          content: `${userMention(member.id)} ${userMention(room.ownerId)}`,
           embeds: [
             brandEmbed(COLORS.critical)
               .setTitle('Bu oda kilitli')
               .setDescription(
-                `${userMention(member.id)}, bu odaya yalnızca oda sahibinin izin verdiği kişiler katılabilir.
-` +
-                  `Katılmak için ${userMention(room.ownerId)} sana \`/izin-ver\` ile izin vermeli ya da seni \`/sese-cek\` ile odasına çekmeli.`,
+                `${userMention(member.id)}, bu odaya yalnızca oda sahibinin izin verdiği kişiler katılabilir.\n` +
+                  (movedToCreator ? 'Seni kendi özel odana yönlendirdim.\n' : '') +
+                  `${userMention(room.ownerId)}, aşağıdaki düğmelerle bu kişiyi odana alabilir ya da reddedebilirsin.`,
               )
-              .setFooter({ text: 'Biri • Bu mesaj birkaç saniye içinde silinecek' }),
+              .setFooter({ text: 'Biri • Bu mesaj 1 dakika sonra silinecek' }),
           ],
-          allowedMentions: { users: [member.id] },
+          components: [buildEntryRequestButtons(channel.id, member.id)],
+          allowedMentions: { users: [member.id, room.ownerId] },
         })
         .catch(() => null);
       if (warning) {
@@ -422,7 +436,9 @@ export class TempVoiceService {
       guild.id,
       brandEmbed(COLORS.warning)
         .setTitle('⛔ Kilitli Odaya İzinsiz Giriş')
-        .setDescription(`${userMention(member.id)}, ${channelMention(channel.id)} odasına izinsiz girdiği için odadan çıkarıldı.`),
+        .setDescription(`${userMention(member.id)}, ${channelMention(channel.id)} odasına izinsiz girdiği için ${
+          movedToCreator ? 'oda oluşturma kanalına yönlendirildi' : 'odadan çıkarıldı'
+        }.`),
     );
     return true;
   }
