@@ -23,6 +23,7 @@ const command: SlashCommand = {
             '`/at` — Kullanıcıyı odadan çıkar (sunucudan atmaz)',
             '`/engelle` • `/engel-kaldir` — Odaya özel engel',
             '`/izin-ver` • `/izin-kaldir` — Özel erişim',
+            `\`/sese-cek\`${prefix ? ` • \`${prefix}sese-cek @kullanıcı\`` : ''} — Seste olan birini odana çek (kilitliyken de)`,
             '`/devret` — Sahipliği devret',
             '`/oda-sil` — Odayı kapat',
           ].join('\n'),

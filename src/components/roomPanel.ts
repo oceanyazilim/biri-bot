@@ -35,6 +35,8 @@ function runUserOperation(rooms: RoomManager, operation: UserOperation, ctx: Roo
       return rooms.allow(ctx, target);
     case 'disallow':
       return rooms.disallow(ctx, target);
+    case 'pull':
+      return rooms.pull(ctx, target);
   }
 }
 

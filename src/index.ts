@@ -65,7 +65,7 @@ async function bootWithFallback(configured: Env, logger: Logger): Promise<App> {
     return await boot(env, logger);
   } catch (error) {
     if (!isDisallowedIntents(error)) throw error;
-    const bare = { ...env, ENABLE_PREFIX_COMMANDS: false, ENABLE_MESSAGE_LOGS: false, ENABLE_GUILD_MEMBERS_INTENT: false };
+    const bare = { ...env, ENABLE_PREFIX_COMMANDS: false, ENABLE_MESSAGE_LOGS: false, ENABLE_MEDIA_CLEANUP: false, ENABLE_GUILD_MEMBERS_INTENT: false };
     logger.warn(
       'Discord ayrıcalıklı intent iznini vermedi (4014). Biri; prefix komutları, mesaj logları ve üye logları KAPALI olarak başlatılıyor. ' +
         'Developer Portal → Bot → Privileged Gateway Intents bölümünden "Message Content Intent" ve gerekirse "Server Members Intent" açın.',
@@ -99,6 +99,7 @@ async function main(): Promise<void> {
     force.unref();
     stopJobs();
     app.tempVoice.shutdown();
+    app.mediaCleanup.shutdown();
     app.logChannels.shutdown();
     await app.logDispatcher.stop().catch(() => undefined);
     await app.health.close().catch(() => undefined);

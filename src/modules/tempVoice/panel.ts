@@ -14,6 +14,7 @@ import { COLORS, MAX_VOICE_USER_LIMIT, TEMP_VOICE_ROOM_PREFIX } from '../../conf
 import type { TempVoiceRoom } from '../../database/repositories/types';
 import { customId } from '../../types/command';
 import { channelMention, discordTimestamp, userMention } from '../../utils/format';
+import { icon, inlineIcon, type PanelIcon } from '../../ui/emojis';
 import { brandEmbed } from '../logging/embeds';
 
 export interface RoomDetails {
@@ -24,10 +25,12 @@ export interface RoomDetails {
 }
 
 export function roomStatusText(room: TempVoiceRoom): string {
-  return `${room.locked ? '🔒 Kilitli' : '🔓 Açık'} • ${room.hidden ? '🙈 Gizli' : '👁️ Görünür'}`;
+  const access = `${inlineIcon(room.locked ? 'lock' : 'unlock')} ${room.locked ? 'Kilitli' : 'Açık'}`;
+  const visibility = `${inlineIcon(room.hidden ? 'hide' : 'show')} ${room.hidden ? 'Gizli' : 'Görünür'}`;
+  return `${access}\n${visibility}`;
 }
 
-export function roomInfoEmbed(room: TempVoiceRoom, channel: VoiceBasedChannel, details: RoomDetails, title = 'Biri • Oda Bilgisi'): EmbedBuilder {
+export function roomInfoEmbed(room: TempVoiceRoom, channel: VoiceBasedChannel, details: RoomDetails, title = 'Oda Bilgisi'): EmbedBuilder {
   const limit = details.userLimit > 0 ? String(details.userLimit) : '∞';
   return brandEmbed(COLORS.primary)
     .setTitle(title)
@@ -43,37 +46,32 @@ export function roomInfoEmbed(room: TempVoiceRoom, channel: VoiceBasedChannel, d
 }
 
 export function buildRoomPanel(room: TempVoiceRoom, channel: VoiceBasedChannel, details: RoomDetails) {
-  const embed = roomInfoEmbed(room, channel, details, 'Biri • Oda Yönetimi').setDescription(
-    'Aşağıdaki düğmelerle odanı yönetebilirsin. Yetkiler yalnızca bu oda için geçerlidir.',
+  const embed = roomInfoEmbed(room, channel, details, 'Oda Yönetimi').setDescription(
+    'Odanı aşağıdaki düğmelerle yönet. Yaptığın değişiklikler yalnızca bu oda için geçerlidir.',
   );
   const id = channel.id;
+  const button = (action: string, label: string, emoji: PanelIcon, style = ButtonStyle.Secondary) =>
+    new ButtonBuilder().setCustomId(customId('room', action, id)).setLabel(label).setEmoji(icon(emoji)).setStyle(style);
   const first = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(customId('room', 'lock', id))
-      .setLabel(room.locked ? 'Kilidi Aç' : 'Kilitle')
-      .setEmoji(room.locked ? '🔓' : '🔒')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId(customId('room', 'hide', id))
-      .setLabel(room.hidden ? 'Göster' : 'Gizle')
-      .setEmoji(room.hidden ? '👁️' : '🙈')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(customId('room', 'users', id)).setLabel('Kullanıcı Yönetimi').setEmoji('👥').setStyle(ButtonStyle.Primary),
+    button('lock', room.locked ? 'Kilidi Aç' : 'Kilitle', room.locked ? 'unlock' : 'lock'),
+    button('hide', room.hidden ? 'Göster' : 'Gizle', room.hidden ? 'show' : 'hide'),
+    button('users', 'Kullanıcılar', 'users', ButtonStyle.Primary),
   );
   const second = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder().setCustomId(customId('room', 'settings', id)).setLabel('Oda Ayarları').setEmoji('⚙️').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(customId('room', 'transfer', id)).setLabel('Sahipliği Devret').setEmoji('👑').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(customId('room', 'close', id)).setLabel('Odayı Kapat').setEmoji('🗑️').setStyle(ButtonStyle.Danger),
+    button('settings', 'İsim / Limit', 'edit'),
+    button('transfer', 'Devret', 'crown'),
+    button('close', 'Odayı Kapat', 'trash', ButtonStyle.Danger),
   );
   return { embeds: [embed], components: [first, second] };
 }
 
 export const USER_OPERATIONS = {
-  kick: { placeholder: '👢 Odadan çıkarılacak kullanıcıyı seç' },
-  block: { placeholder: '⛔ Engellenecek kullanıcıyı seç' },
-  unblock: { placeholder: '✅ Engeli kaldırılacak kullanıcıyı seç' },
-  allow: { placeholder: '🎟️ Özel izin verilecek kullanıcıyı seç' },
-  disallow: { placeholder: '🚫 Özel izni kaldırılacak kullanıcıyı seç' },
+  kick: { placeholder: 'Odadan çıkarılacak kullanıcıyı seç' },
+  block: { placeholder: 'Engellenecek kullanıcıyı seç' },
+  unblock: { placeholder: 'Engeli kaldırılacak kullanıcıyı seç' },
+  allow: { placeholder: 'Özel izin verilecek kullanıcıyı seç' },
+  disallow: { placeholder: 'Özel izni kaldırılacak kullanıcıyı seç' },
+  pull: { placeholder: 'Odana çekilecek kullanıcıyı seç (seste olmalı)' },
 } as const;
 
 export type UserOperation = keyof typeof USER_OPERATIONS;
@@ -82,8 +80,11 @@ export function isUserOperation(value: string): value is UserOperation {
   return value in USER_OPERATIONS;
 }
 
+/** Discord allows five component rows; `pull` lives on the hub panel and `/sese-cek` instead. */
+const MANAGEMENT_OPERATIONS: readonly UserOperation[] = ['kick', 'block', 'unblock', 'allow', 'disallow'];
+
 export function buildUserManagement(channelId: string) {
-  const rows = (Object.keys(USER_OPERATIONS) as UserOperation[]).map((operation) =>
+  const rows = MANAGEMENT_OPERATIONS.map((operation) =>
     new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(
       new UserSelectMenuBuilder()
         .setCustomId(customId('room', 'user', operation, channelId))
@@ -93,7 +94,7 @@ export function buildUserManagement(channelId: string) {
     ),
   );
   return {
-    embeds: [brandEmbed().setTitle('👥 Kullanıcı Yönetimi').setDescription('Yapmak istediğin işlemin menüsünden bir kullanıcı seç.')],
+    embeds: [brandEmbed().setTitle('Kullanıcı Yönetimi').setDescription('Yapmak istediğin işlemin menüsünden bir kullanıcı seç.')],
     components: rows,
   };
 }
@@ -169,50 +170,60 @@ export const HUB_LIMIT_CHOICES = [0, 2, 3, 4, 5, 6, 8, 10, 15, 20, 25] as const;
  */
 export function buildHubPanel(creatorChannelId: string) {
   const embed = brandEmbed(COLORS.primary)
-    .setTitle('🎛️ Biri • Ses Odası Yönetimi')
+    .setTitle('Ses Odası Yönetimi')
     .setDescription(
-      `${channelMention(creatorChannelId)} kanalına katılarak kendi ses odanı oluştur, sonra odanı buradan yönet.\n\n` +
-        'Düğmeler **yalnızca senin odan** üzerinde işlem yapar ve yanıtları sadece sen görürsün.',
+      `**1.** ${channelMention(creatorChannelId)} kanalına katıl, odan otomatik açılsın.\n` +
+        '**2.** Odanı aşağıdan yönet. Düğmeler **yalnızca senin odanı** etkiler ve yanıtları sadece sen görürsün.',
     )
     .addFields(
-      { name: '🔒 Erişim', value: 'Kilitle, kilidi aç, gizle veya göster', inline: true },
-      { name: '👥 Kullanıcılar', value: 'Odadan at, engelle, özel izin ver', inline: true },
-      { name: '⚙️ Oda', value: 'İsim ve limit, sahiplik devri, kapatma', inline: true },
-      { name: '👥 Hızlı Limit', value: 'En alttaki menüden odanın kişi sınırını tek tıkla seç', inline: false },
-    );
-  const button = (action: string, label: string, emoji: string, style = ButtonStyle.Secondary) =>
-    new ButtonBuilder().setCustomId(customId('hub', action)).setLabel(label).setEmoji(emoji).setStyle(style);
+      {
+        name: 'Erişim',
+        value: `${inlineIcon('lock')} Kilitli odana yöneticiler ve sunucu sahibi dahil, izin vermediğin kimse giremez.`,
+      },
+      {
+        name: 'Kullanıcılar',
+        value: `${inlineIcon('pull')} Seste olan birini \`/sese-cek\` ile odana çek • ${inlineIcon('allow')} izin ver • ${inlineIcon('block')} engelle`,
+      },
+      {
+        name: 'Oda',
+        value: `${inlineIcon('edit')} İsim ve limit • ${inlineIcon('crown')} sahiplik devri • ${inlineIcon('trash')} kapatma`,
+      },
+    )
+    .setFooter({ text: 'Biri • Ses Odaları' });
+  const button = (action: string, label: string, emoji: PanelIcon, style = ButtonStyle.Secondary) =>
+    new ButtonBuilder().setCustomId(customId('hub', action)).setLabel(label).setEmoji(icon(emoji)).setStyle(style);
   return {
     embeds: [embed],
     components: [
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        button('lock', 'Kilitle', '🔒'),
-        button('unlock', 'Kilidi Aç', '🔓'),
-        button('hide', 'Gizle', '🙈'),
-        button('show', 'Göster', '👁️'),
-        button('info', 'Oda Bilgisi', 'ℹ️', ButtonStyle.Primary),
+        button('lock', 'Kilitle', 'lock'),
+        button('unlock', 'Kilidi Aç', 'unlock'),
+        button('hide', 'Gizle', 'hide'),
+        button('show', 'Göster', 'show'),
+        button('info', 'Oda Bilgisi', 'info', ButtonStyle.Primary),
       ),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        button('kick', 'Odadan At', '👢'),
-        button('block', 'Engelle', '⛔'),
-        button('unblock', 'Engeli Kaldır', '✅'),
-        button('allow', 'İzin Ver', '🎟️'),
-        button('disallow', 'İzni Kaldır', '🚫'),
+        button('pull', 'Sese Çek', 'pull', ButtonStyle.Success),
+        button('kick', 'Odadan At', 'kick'),
+        button('block', 'Engelle', 'block'),
+        button('unblock', 'Engeli Kaldır', 'unblock'),
+        button('allow', 'İzin Ver', 'allow'),
       ),
       new ActionRowBuilder<ButtonBuilder>().addComponents(
-        button('settings', 'İsim / Limit', '✏️'),
-        button('transfer', 'Sahipliği Devret', '👑'),
-        button('close', 'Odayı Kapat', '🗑️', ButtonStyle.Danger),
+        button('disallow', 'İzni Kaldır', 'disallow'),
+        button('settings', 'İsim / Limit', 'edit'),
+        button('transfer', 'Devret', 'crown'),
+        button('close', 'Odayı Kapat', 'trash', ButtonStyle.Danger),
       ),
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId(customId('hub', 'limit'))
-          .setPlaceholder('👥 Kişi limiti seç')
+          .setPlaceholder('Kişi limiti seç')
           .addOptions(
             HUB_LIMIT_CHOICES.map((limit) => ({
               label: limit === 0 ? 'Limitsiz' : `${limit} kişi`,
               value: String(limit),
-              emoji: limit === 0 ? '♾️' : '👥',
+              emoji: icon(limit === 0 ? 'infinity' : 'users'),
             })),
           ),
       ),

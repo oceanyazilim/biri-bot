@@ -1,6 +1,7 @@
 import type { Message } from 'discord.js';
 import { forgetBans } from '../../commands/moderation/unban';
 import type { App } from '../../core/App';
+import { handlePullPrefix, PULL_COMMAND_NAMES } from '../tempVoice/prefixCommands';
 import { clip, discordTimestamp, userLabel } from '../../utils/format';
 import { brandEmbed, errorEmbed, successEmbed, warningEmbed } from '../logging/embeds';
 import type { ModerationAction, ModerationResult } from './ModerationService';
@@ -37,6 +38,8 @@ export async function handlePrefixMessage(app: App, message: Message<true>): Pro
   const prefix = app.env.PREFIX;
   const parsed = parsePrefixCommand(message.content, prefix);
   if (!parsed) return;
+  // Room command: open to every room owner, not limited to the yargı list.
+  if (PULL_COMMAND_NAMES.has(parsed.name)) return handlePullPrefix(app, message, parsed.args);
   const command = PREFIX_COMMANDS[parsed.name];
   if (!command) return;
   const label = `${prefix}${parsed.name}`;

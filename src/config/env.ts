@@ -61,6 +61,26 @@ const envSchema = z.object({
     .max(5)
     .refine((value) => !value.startsWith('/') && !/\s/.test(value), "PREFIX '/' ile başlayamaz ve boşluk içeremez")
     .default('.'),
+  /**
+   * Deletes images, GIFs, files and links from the chat channel MEDIA_CLEANUP_DELAY_SEC
+   * after they were posted. Needs the Message Content intent, like prefix commands.
+   */
+  ENABLE_MEDIA_CLEANUP: z
+    .enum(['true', 'false', '1', '0', 'yes', 'no'])
+    .default('true')
+    .transform((value) => value === 'true' || value === '1' || value === 'yes'),
+  /** Comma-separated channel ids. Empty = every text channel named like "chat" / "sohbet". */
+  MEDIA_CLEANUP_CHANNEL_IDS: z
+    .string()
+    .default('')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    )
+    .pipe(z.array(snowflake)),
+  MEDIA_CLEANUP_DELAY_SEC: z.coerce.number().int().min(5).max(3600).default(60),
   /** Logs deleted/edited messages. Requires the privileged Message Content intent. */
   ENABLE_MESSAGE_LOGS: booleanFlag,
 

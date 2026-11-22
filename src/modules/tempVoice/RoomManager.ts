@@ -97,6 +97,15 @@ export class RoomManager {
     return fail('Yönetebileceğin bir geçici odan yok. Önce **➕・Oda Oluştur** kanalına katılarak bir oda oluştur.');
   }
 
+  /** The room the actor owns, ignoring the administrator override (used by `/sese-cek`). */
+  resolveOwned(actor: GuildMember): RoomContext | RoomActionResult {
+    for (const room of this.service.roomsOwnedBy(actor.guild.id, actor.id)) {
+      const channel = this.service.voiceChannel(actor.guild, room.channelId);
+      if (channel) return { room, channel, actor, viaAdmin: false };
+    }
+    return fail('Kullanıcı çekebilmek için kendi geçici odan olmalı. Önce **➕・Oda Oluştur** kanalına katılarak bir oda oluştur.');
+  }
+
   static isContext(value: RoomContext | RoomActionResult): value is RoomContext {
     return 'room' in value;
   }
@@ -161,6 +170,38 @@ export class RoomManager {
     }
     this.log(ctx.channel.guild.id, ctx.actor.id, ctx.channel.id, `👢 ${userMention(target.id)} ses odasından çıkarıldı`);
     return done(`👢 ${userMention(target.id)} ses odasından çıkarıldı. (Sunucudan atılmadı.)`);
+  }
+
+  /**
+   * Moves a member who is in another voice channel into the room. Works while the
+   * room is locked: the bot grants a one-time entry pass before the move. Only the
+   * room owner may pull members in, never through the administrator override.
+   */
+  async pull(ctx: RoomContext, target: GuildMember): Promise<RoomActionResult> {
+    if (ctx.viaAdmin || ctx.room.ownerId !== ctx.actor.id) return fail('Odaya yalnızca oda sahibi kullanıcı çekebilir.');
+    if (target.id === ctx.actor.id) return fail('Kendini odana çekemezsin.');
+    if (target.id === ctx.channel.client.user.id) return fail('Biri odaya çekilemez.');
+    if (target.voice.channelId === ctx.channel.id) return fail(`${userMention(target.id)} zaten odanda.`);
+    if (!target.voice.channelId) {
+      return fail(`${userMention(target.id)} şu anda bir ses kanalında değil. Discord yalnızca seste olan birini taşımaya izin verir.`);
+    }
+    const restrictions = await this.repo.listRestrictions(ctx.room.id);
+    if (restrictions.some((entry) => entry.userId === target.id)) return fail(`${userMention(target.id)} bu odada engelli. Önce engelini kaldır.`);
+    if (ctx.channel.userLimit > 0 && this.service.humanCount(ctx.channel) >= ctx.channel.userLimit && !target.user.bot) {
+      return fail(`Oda dolu (${ctx.channel.userLimit} kişi). Önce limiti artır.`);
+    }
+    if (!this.botCan(ctx.channel, PermissionFlagsBits.MoveMembers)) {
+      return fail('Botun bu kanalda **Üyeleri Taşı** yetkisi yok, kullanıcı odaya çekilemedi.');
+    }
+    this.service.grantEntryPass(ctx.channel.id, target.id);
+    try {
+      await target.voice.setChannel(ctx.channel, `Biri: ${ctx.actor.user.tag} odasına çekti`);
+    } catch (error) {
+      this.service.revokeEntryPass(ctx.channel.id, target.id);
+      return fail(`Kullanıcı odaya çekilemedi: ${describeError(error)}`);
+    }
+    this.log(ctx.channel.guild.id, ctx.actor.id, ctx.channel.id, `🎯 ${userMention(target.id)} odaya çekildi`);
+    return done(`🎯 ${userMention(target.id)} odana çekildi.`);
   }
 
   async rename(ctx: RoomContext, rawName: string): Promise<RoomActionResult> {

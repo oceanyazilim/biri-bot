@@ -17,6 +17,7 @@ import { LogChannelService } from '../modules/logging/LogChannelService';
 import { LogDispatcher } from '../modules/logging/LogDispatcher';
 import { ModerationService } from '../modules/moderation/ModerationService';
 import { YargiService } from '../modules/moderation/YargiService';
+import { MediaCleanupService } from '../modules/chat/MediaCleanupService';
 import { RoomManager } from '../modules/tempVoice/RoomManager';
 import { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import { CooldownService } from '../services/CooldownService';
@@ -25,7 +26,9 @@ import { SelfActionRegistry } from '../services/SelfActionRegistry';
 import type { Logger } from '../utils/logger';
 import type { App } from './App';
 
-export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_MESSAGE_LOGS' | 'ENABLE_PREFIX_COMMANDS'>): GatewayIntentBits[] {
+export function gatewayIntents(
+  env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'ENABLE_MESSAGE_LOGS' | 'ENABLE_PREFIX_COMMANDS'> & { ENABLE_MEDIA_CLEANUP?: boolean },
+): GatewayIntentBits[] {
   const intents = [
     GatewayIntentBits.Guilds, // channels, roles, guild updates
     GatewayIntentBits.GuildVoiceStates, // join-to-create rooms
@@ -34,7 +37,7 @@ export function gatewayIntents(env: Pick<Env, 'ENABLE_GUILD_MEMBERS_INTENT' | 'E
   // Privileged: only requested when explicitly enabled.
   if (env.ENABLE_GUILD_MEMBERS_INTENT) intents.push(GatewayIntentBits.GuildMembers);
   // Message logs and prefix commands need to read message content; MessageContent is privileged.
-  if (env.ENABLE_MESSAGE_LOGS || env.ENABLE_PREFIX_COMMANDS) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
+  if (env.ENABLE_MESSAGE_LOGS || env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MEDIA_CLEANUP) intents.push(GatewayIntentBits.GuildMessages, GatewayIntentBits.MessageContent);
   return intents;
 }
 
@@ -75,6 +78,11 @@ export function createApp(env: Env, logger: Logger): App {
   tempVoice.setLogSink(voiceLog);
   rooms.setLogSink(voiceLog);
 
+  const mediaCleanup = new MediaCleanupService(
+    { channelIds: env.MEDIA_CLEANUP_CHANNEL_IDS, delayMs: env.MEDIA_CLEANUP_DELAY_SEC * 1000 },
+    logger.child({ module: 'mediaCleanup' }),
+  );
+
   const guardLogger = logger.child({ module: 'guard' });
   const guardConfig = new GuardConfigService(repos.guard);
   const trust = new TrustService(repos.guard);
@@ -104,6 +112,7 @@ export function createApp(env: Env, logger: Logger): App {
     activity,
     tempVoice,
     rooms,
+    mediaCleanup,
     guard,
     guardConfig,
     trust,

@@ -35,6 +35,10 @@ Tüm kullanıcı mesajları Türkçedir. Kod ve teknik dokümantasyon İngilizce
 - Boş oda, ayarlanabilir gecikmeyle silinir; biri geri dönerse silme iptal edilir
 - Sahip ayrılınca bekleme süresi sonunda sahiplik, odada en uzun süredir bulunan kişiye geçer
 - Kilitleme, gizleme, limit, isim, odaya özel engel/izin, sahiplik devri
+- **Kilit herkes için geçerli:** Discord, yöneticilerin ve sunucu sahibinin kanal izinlerini yok saymasına izin verir; Biri bu yüzden kilitli odaya izinsiz gireni (yönetici ve taç sahibi dahil) anında sesten çıkarır ve oda sohbetinde etiketleyerek uyarır (uyarı 15 sn sonra silinir). Girebilenler: oda sahibi, `/izin-ver` ile izin verilenler, kilitlendiğinde içeride olanlar ve `/sese-cek` ile çekilenler. Botlar etkilenmez.
+- `/sese-cek` ve `.sese-cek @kullanıcı`: oda sahibi, başka bir ses kanalındaki birini (oda kilitliyken de) odasına çeker
+- Sohbet medya temizliği: sohbet kanalında atılan görsel, GIF, dosya ve bağlantılar 1 dakika sonra otomatik silinir (`ENABLE_MEDIA_CLEANUP`, `MEDIA_CLEANUP_CHANNEL_IDS`, `MEDIA_CLEANUP_DELAY_SEC`; kanal belirtilmezse adı `chat` / `sohbet` olan kanallar). Message Content Intent ve o kanalda *Mesajları Yönet* yetkisi gerekir.
+- Panel ikonları `assets/emojis` içindedir ([Lucide](https://lucide.dev), ISC lisansı) ve açılışta botun **uygulama emojisi** olarak otomatik yüklenir; yüklenemezse standart emojiler kullanılır.
 - Etkileşimli yönetim paneli (`/odam`): butonlar, kullanıcı seçme menüleri, ayar penceresi
 - Kalıcı **🎛️・biri-yönetim** kanalı: ses kategorisinde, herkesin kendi odasını düğmelerle yönettiği sabit menü (kilitle, aç, gizle, göster, at, engelle, izin ver, isim/limit, hızlı kişi limiti menüsü, devret, kapat). Eski sürümlerden kalan `🎛️・oda-paneli` kanalı otomatik olarak yeniden adlandırılır. Bot yeniden başlasa da çalışır; kanal üyeler için salt okunurdur.
 - Bot yeniden başlarsa oda durumu veritabanından kurtarılır
@@ -197,6 +201,7 @@ npm run deploy-commands
 | `/at @kullanici` | Kullanıcıyı **ses odasından** çıkarır. Sunucudan atmaz. |
 | `/engelle` · `/engel-kaldir` | Odaya özel engel (sunucu yasağı değildir) |
 | `/izin-ver` · `/izin-kaldir` | Kilitli/gizli odaya özel erişim |
+| `/sese-cek @kullanici` · `.sese-cek @kullanıcı` | Seste olan birini odana çek (kilitliyken de çalışır) |
 | `/devret @kullanici` | Sahipliği odadaki birine devret |
 | `/oda-sil` | Onay alarak odayı kapat |
 

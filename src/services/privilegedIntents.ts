@@ -7,7 +7,7 @@ export interface PrivilegedIntents {
   guildMembers: boolean;
 }
 
-type IntentEnv = Pick<Env, 'ENABLE_PREFIX_COMMANDS' | 'ENABLE_MESSAGE_LOGS' | 'ENABLE_GUILD_MEMBERS_INTENT'>;
+type IntentEnv = Pick<Env, 'ENABLE_PREFIX_COMMANDS' | 'ENABLE_MESSAGE_LOGS' | 'ENABLE_GUILD_MEMBERS_INTENT'> & { ENABLE_MEDIA_CLEANUP?: boolean };
 
 /** Reads the intent switches from the application flags. Null when Discord could not be asked. */
 export async function fetchPrivilegedIntents(token: string, fetchImpl: typeof fetch = fetch): Promise<PrivilegedIntents | null> {
@@ -38,10 +38,11 @@ export function fitToPrivilegedIntents<T extends IntentEnv>(env: T, available: P
   const next = { ...env };
   const warnings: string[] = [];
   const where = 'Developer Portal → Bot → Privileged Gateway Intents';
-  if (!available.messageContent && (env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MESSAGE_LOGS)) {
+  if (!available.messageContent && (env.ENABLE_PREFIX_COMMANDS || env.ENABLE_MESSAGE_LOGS || env.ENABLE_MEDIA_CLEANUP)) {
     next.ENABLE_PREFIX_COMMANDS = false;
     next.ENABLE_MESSAGE_LOGS = false;
-    warnings.push(`"Message Content Intent" kapalı: .yargi / .unyargı ve mesaj logları devre dışı. Açmak için: ${where}.`);
+    if (env.ENABLE_MEDIA_CLEANUP !== undefined) next.ENABLE_MEDIA_CLEANUP = false;
+    warnings.push(`"Message Content Intent" kapalı: .yargi / .unyargı / .sese-cek, sohbet medya temizliği ve mesaj logları devre dışı. Açmak için: ${where}.`);
   }
   if (!available.guildMembers && env.ENABLE_GUILD_MEMBERS_INTENT) {
     next.ENABLE_GUILD_MEMBERS_INTENT = false;

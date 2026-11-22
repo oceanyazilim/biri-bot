@@ -62,6 +62,12 @@ export type TransferResult =
   | { ok: true; previousOwnerId: string; newOwnerId: string }
   | { ok: false; reason: 'NO_ROOM' | 'OWNER_CHANGED' | 'NOT_IN_ROOM' | 'SAME_OWNER' };
 
+/** How long a `/sese-cek` pass stays valid; the move itself takes well under a second. */
+const ENTRY_PASS_TTL_MS = 30_000;
+const INTRUDER_WARNING_COOLDOWN_MS = 15_000;
+/** The warning posted in the room chat removes itself after this delay. */
+export const INTRUDER_WARNING_TTL_MS = 15_000;
+
 const REQUIRED_VOICE_PERMISSIONS: Array<[bigint, string]> = [
   [PermissionFlagsBits.ManageChannels, 'Kanalları Yönet'],
   [PermissionFlagsBits.ManageRoles, 'Rolleri Yönet'],
@@ -84,6 +90,10 @@ export class TempVoiceService {
   private readonly roomLocks = new KeyedMutex();
   private readonly creationSlots: KeyedSemaphore;
   private readonly permissionWarnings = new BoundedTtlMap<string, true>(1_000, 10 * 60 * 1000);
+  /** One-time entry passes into locked rooms, granted by `/sese-cek` just before the bot moves someone in. */
+  private readonly entryPasses = new BoundedTtlMap<string, true>(5_000, ENTRY_PASS_TTL_MS);
+  /** Limits the chat warning for repeated join attempts; the disconnect itself always happens. */
+  private readonly intruderWarnings = new BoundedTtlMap<string, true>(5_000, INTRUDER_WARNING_COOLDOWN_MS);
   private logSink: VoiceLogSink | null = null;
 
   constructor(
@@ -309,6 +319,7 @@ export class TempVoiceService {
     const room = this.rooms.get(channelId);
     if (room) {
       this.timers.cancel(`delete:${channelId}`);
+      if (await this.rejectIfNotAdmitted(guild, room, member)) return;
       this.joins.join(channelId, member.id);
       if (member.id === room.ownerId && this.timers.cancel(`transfer:${channelId}`)) {
         await this.updateRoom(channelId, { ownerLeftAt: null });
@@ -339,6 +350,81 @@ export class TempVoiceService {
       await this.updateRoom(channelId, { ownerLeftAt: new Date() });
       this.scheduleTransfer(guild, channelId, (config?.ownerGraceSec ?? 30) * 1000);
     }
+  }
+
+  // ───────────────────────────── locked rooms ─────────────────────────────
+
+  /** Lets one member into a locked room once, for a bot move made by `/sese-cek`. */
+  grantEntryPass(channelId: string, userId: string): void {
+    this.entryPasses.set(`${channelId}:${userId}`, true);
+  }
+
+  revokeEntryPass(channelId: string, userId: string): void {
+    this.entryPasses.delete(`${channelId}:${userId}`);
+  }
+
+  /**
+   * Whether a member may be in a locked room. Discord lets Administrators and the
+   * server owner ignore channel permissions, so the lock is enforced here as well:
+   * only the owner, members with a personal Connect allow (`/izin-ver`, or inside
+   * when the room was locked) and members pulled in with `/sese-cek` may stay.
+   */
+  isAdmitted(room: TempVoiceRoom, channel: VoiceBasedChannel, member: GuildMember): boolean {
+    if (!room.locked) return true;
+    if (member.id === room.ownerId || member.user.bot) return true;
+    const overwrite = channel.permissionOverwrites.cache.get(member.id);
+    if (overwrite?.type === OverwriteType.Member && (overwrite.allow.bitfield & PermissionFlagsBits.Connect) !== 0n) return true;
+    const key = `${channel.id}:${member.id}`;
+    if (this.entryPasses.has(key)) {
+      this.entryPasses.delete(key);
+      return true;
+    }
+    return false;
+  }
+
+  /** Disconnects a member who entered a locked room without permission and warns them in the room chat. */
+  private async rejectIfNotAdmitted(guild: Guild, room: TempVoiceRoom, member: GuildMember): Promise<boolean> {
+    const channel = this.voiceChannel(guild, room.channelId);
+    if (!channel || this.isAdmitted(room, channel, member)) return false;
+    try {
+      await member.voice.disconnect('Biri: kilitli odaya izinsiz giriş');
+    } catch (error) {
+      this.logger.warn({ err: error, channelId: channel.id, userId: member.id }, 'Kilitli odaya giren kullanıcı çıkarılamadı');
+      return false;
+    }
+
+    const warnKey = `${channel.id}:${member.id}`;
+    if (!this.intruderWarnings.has(warnKey)) {
+      this.intruderWarnings.set(warnKey, true);
+      const warning = await channel
+        .send({
+          content: userMention(member.id),
+          embeds: [
+            brandEmbed(COLORS.critical)
+              .setTitle('Bu oda kilitli')
+              .setDescription(
+                `${userMention(member.id)}, bu odaya yalnızca oda sahibinin izin verdiği kişiler katılabilir.
+` +
+                  `Katılmak için ${userMention(room.ownerId)} sana \`/izin-ver\` ile izin vermeli ya da seni \`/sese-cek\` ile odasına çekmeli.`,
+              )
+              .setFooter({ text: 'Biri • Bu mesaj birkaç saniye içinde silinecek' }),
+          ],
+          allowedMentions: { users: [member.id] },
+        })
+        .catch(() => null);
+      if (warning) {
+        this.timers.schedule(`warning:${warning.id}`, INTRUDER_WARNING_TTL_MS, async () => {
+          await warning.delete().catch(() => undefined);
+        });
+      }
+    }
+    this.log(
+      guild.id,
+      brandEmbed(COLORS.warning)
+        .setTitle('⛔ Kilitli Odaya İzinsiz Giriş')
+        .setDescription(`${userMention(member.id)}, ${channelMention(channel.id)} odasına izinsiz girdiği için odadan çıkarıldı.`),
+    );
+    return true;
   }
 
   // ───────────────────────────── creation ─────────────────────────────

@@ -36,6 +36,7 @@ import limitsiz from './voice/limitsiz';
 import oda from './voice/oda';
 import odaSil from './voice/oda-sil';
 import odam from './voice/odam';
+import seseCek from './voice/sese-cek';
 
 export const ALL_COMMANDS: SlashCommand[] = [
   // Temp voice
@@ -51,6 +52,7 @@ export const ALL_COMMANDS: SlashCommand[] = [
   engelKaldir,
   izinVer,
   izinKaldir,
+  seseCek,
   devret,
   oda,
   odam,

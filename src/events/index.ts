@@ -12,7 +12,7 @@ import { roleCreate, roleDelete } from './security/roleEvents';
 import type { AnyBotEvent } from './types';
 import voiceStateUpdate from './voice/voiceStateUpdate';
 
-export function buildEventList(membersIntent: boolean, messageLogs: boolean, prefixCommands = false): AnyBotEvent[] {
+export function buildEventList(membersIntent: boolean, messageLogs: boolean, prefixCommands = false, mediaCleanup = false): AnyBotEvent[] {
   const events: AnyBotEvent[] = [
     ready,
     guildCreate,
@@ -28,14 +28,14 @@ export function buildEventList(membersIntent: boolean, messageLogs: boolean, pre
     guildBanRemove,
   ];
   if (membersIntent) events.push(guildMemberRemove, guildMemberAdd);
-  if (prefixCommands) events.push(messageCreate);
+  if (prefixCommands || mediaCleanup) events.push(messageCreate);
   if (messageLogs) events.push(messageDelete, messageUpdate, messageDeleteBulk);
   return events;
 }
 
 /** Registers handlers; a failing handler is logged and never crashes the process. */
 export function registerEvents(app: App): void {
-  for (const event of buildEventList(app.env.ENABLE_GUILD_MEMBERS_INTENT, app.env.ENABLE_MESSAGE_LOGS, app.env.ENABLE_PREFIX_COMMANDS)) {
+  for (const event of buildEventList(app.env.ENABLE_GUILD_MEMBERS_INTENT, app.env.ENABLE_MESSAGE_LOGS, app.env.ENABLE_PREFIX_COMMANDS, app.env.ENABLE_MEDIA_CLEANUP)) {
     const listener = (...args: unknown[]) => {
       Promise.resolve()
         .then(() => (event.execute as (app: App, ...rest: unknown[]) => Promise<void> | void)(app, ...args))

@@ -1,4 +1,5 @@
 import { ActivityType, Events } from 'discord.js';
+import { syncPanelIcons } from '../../ui/emojis';
 import { defineEvent } from '../types';
 
 /** Startup recovery: rebuilds temp room state and preloads Guard settings for every guild. */
@@ -18,6 +19,9 @@ export default defineEvent({
     );
     client.user.setPresence({ activities: [{ name: 'ses odalarını ve sunucu güvenliğini', type: ActivityType.Watching }] });
 
+    // Before recovery, which refreshes the panels with the uploaded icons.
+    await syncPanelIcons(client, app.logger);
+
     let restored = 0;
     let removed = 0;
     for (const guild of client.guilds.cache.values()) {
@@ -28,6 +32,7 @@ export default defineEvent({
         removed += result.removed;
         await app.guardConfig.get(guild.id);
         await app.trust.preload(guild.id);
+        if (app.env.ENABLE_MEDIA_CLEANUP) await app.mediaCleanup.sweepGuild(guild);
       } catch (error) {
         app.logger.error({ err: error, guildId: guild.id }, 'Sunucu durumu kurtarılamadı');
       }
