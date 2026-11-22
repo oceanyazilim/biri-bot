@@ -53,6 +53,20 @@ const envSchema = z.object({
         .filter((part) => part.length > 0),
     )
     .pipe(z.array(snowflake)),
+  /**
+   * Comma-separated ids of Biri's owners. They are exempt from every sanction:
+   * locked rooms, room kick/block, ban/kick/.yargi and Guard role stripping.
+   */
+  BOT_OWNER_IDS: z
+    .string()
+    .default('887788724988026890')
+    .transform((value) =>
+      value
+        .split(',')
+        .map((part) => part.trim())
+        .filter((part) => part.length > 0),
+    )
+    .pipe(z.array(snowflake)),
   /** Must not be `/`, which Discord reserves for slash commands. */
   PREFIX: z
     .string()

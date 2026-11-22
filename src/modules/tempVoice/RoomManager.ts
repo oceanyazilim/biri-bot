@@ -1,5 +1,6 @@
 import { PermissionFlagsBits, type Guild, type GuildMember, type VoiceBasedChannel } from 'discord.js';
 import { COLORS, MAX_ROOM_OVERWRITES, MAX_VOICE_USER_LIMIT } from '../../config/constants';
+import { isBotOwner } from '../../config/owners';
 import type { TempVoiceRepository, TempVoiceRoom } from '../../database/repositories/types';
 import { BoundedTtlMap } from '../../utils/collections';
 import { describeError } from '../../utils/discordErrors';
@@ -157,6 +158,7 @@ export class RoomManager {
   async disconnect(ctx: RoomContext, target: GuildMember): Promise<RoomActionResult> {
     if (target.id === ctx.actor.id) return fail('Kendini odadan atamazsın.');
     if (target.id === ctx.channel.client.user.id) return fail('Biri odadan atılamaz.');
+    if (isBotOwner(target.id)) return fail('Sahibimi odadan atamam.');
     if (target.voice.channelId !== ctx.channel.id) return fail(`${userMention(target.id)} şu anda bu odada değil.`);
     if (target.id === ctx.room.ownerId && !ctx.viaAdmin) return fail('Oda sahibi odadan atılamaz.');
     if (isProtectedStaff(target) && !isRoomAdmin(ctx.actor)) return fail('Sunucu yetkilileri odadan atılamaz.');
@@ -247,6 +249,7 @@ export class RoomManager {
   async block(ctx: RoomContext, target: GuildMember): Promise<RoomActionResult> {
     if (target.id === ctx.actor.id) return fail('Kendini engelleyemezsin.');
     if (target.id === ctx.room.ownerId) return fail('Oda sahibi engellenemez.');
+    if (isBotOwner(target.id)) return fail('Sahibimi engelleyemem.');
     if (target.user.bot) return fail('Botlar engellenemez.');
     if (isProtectedStaff(target)) return fail('Sunucu yetkilileri oda engellemesinden etkilenmez.');
     if ((await this.service.projectedOverwriteCount(ctx.channel.guild, ctx.room, ctx.channel, target.id)) > MAX_ROOM_OVERWRITES) {

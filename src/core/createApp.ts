@@ -17,6 +17,7 @@ import { LogChannelService } from '../modules/logging/LogChannelService';
 import { LogDispatcher } from '../modules/logging/LogDispatcher';
 import { ModerationService } from '../modules/moderation/ModerationService';
 import { YargiService } from '../modules/moderation/YargiService';
+import { setBotOwners } from '../config/owners';
 import { MediaCleanupService } from '../modules/chat/MediaCleanupService';
 import { RoomManager } from '../modules/tempVoice/RoomManager';
 import { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
@@ -43,6 +44,7 @@ export function gatewayIntents(
 
 /** Wires every service together. Nothing connects to Discord until `client.login`. */
 export function createApp(env: Env, logger: Logger): App {
+  setBotOwners(env.BOT_OWNER_IDS);
   const client = new Client({
     intents: gatewayIntents(env),
     partials: [Partials.GuildMember, Partials.User],

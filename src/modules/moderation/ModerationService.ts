@@ -9,6 +9,7 @@ import {
   type User,
 } from 'discord.js';
 import { COLORS } from '../../config/constants';
+import { isBotOwner } from '../../config/owners';
 import { describeError, discordErrorCode } from '../../utils/discordErrors';
 import { clip, formatDuration, userLabel, userMention } from '../../utils/format';
 import type { Logger } from '../../utils/logger';
@@ -110,6 +111,8 @@ export class ModerationService {
     const { action, guild, moderator, targetId } = request;
     if (action === 'UNBAN') return this.unban(request);
     const spec = ACTIONS[action];
+    // Checked first, so the answer is the same whoever asks and whatever permissions they have.
+    if (isBotOwner(targetId)) return fail(action === 'BAN' ? 'Sahibimi banlayamam.' : 'Sahibimi sunucudan atamam.');
     const me = guild.members.me;
 
     if (!moderator.permissions.has(spec.permission)) return fail(`Bu komut için **${spec.permissionLabel}** yetkin yok.`);

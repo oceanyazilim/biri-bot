@@ -1,4 +1,5 @@
 import { AuditLogEvent, PermissionFlagsBits, type EmbedBuilder, type Guild } from 'discord.js';
+import { isBotOwner } from '../../config/owners';
 import { COLORS } from '../../config/constants';
 import type { YargiRecord, YargiRepository } from '../../database/repositories/types';
 import { describeError } from '../../utils/discordErrors';
@@ -56,6 +57,8 @@ export class YargiService {
 
   /** Bans a judged user again. Returns whether a ban was issued. Never throws. */
   async enforce(guild: Guild, userId: string, trigger: YargiTrigger, userTag: string | null = null): Promise<boolean> {
+    // Biri never bans its owner, not even when an old record lists them.
+    if (isBotOwner(userId)) return false;
     const key = `${guild.id}:${userId}`;
     if (this.inFlight.has(key)) return false;
     this.inFlight.add(key);

@@ -1,4 +1,5 @@
 import { PermissionFlagsBits, type Guild, type GuildMember } from 'discord.js';
+import { isBotOwner } from '../../config/owners';
 import type { GuardManager, GuardRepository, TrustedExecutor } from '../../database/repositories/types';
 import type { ExemptionReason, TrustedType } from '../../types/guard';
 
@@ -38,7 +39,7 @@ export class TrustService {
    * owner is always exempt. Role-based trust needs the executor's current roles.
    */
   async exemptionFor(guild: Guild, executorId: string): Promise<ExemptionReason | null> {
-    if (executorId === guild.ownerId) return 'OWNER';
+    if (executorId === guild.ownerId || isBotOwner(executorId)) return 'OWNER';
     const trust = await this.load(guild.id);
     if (trust.users.has(executorId)) return 'TRUSTED_USER';
     if (trust.bots.has(executorId)) return 'TRUSTED_BOT';

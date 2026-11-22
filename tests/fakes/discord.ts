@@ -429,7 +429,7 @@ export class FakeGuild {
     return role;
   }
 
-  addMember(opts: { name: string; bot?: boolean; permissions?: bigint; roles?: FakeRole[] }): FakeMember {
+  addMember(opts: { id?: string; name: string; bot?: boolean; permissions?: bigint; roles?: FakeRole[] }): FakeMember {
     const member = new FakeMember(this, opts);
     member.roles.give(...(opts.roles ?? []));
     this.members.cache.set(member.id, member);

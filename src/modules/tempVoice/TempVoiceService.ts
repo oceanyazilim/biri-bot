@@ -17,6 +17,7 @@ import {
   TEMP_VOICE_CATEGORY_NAME,
   TEMP_VOICE_CREATOR_NAME,
 } from '../../config/constants';
+import { isBotOwner } from '../../config/owners';
 import type { TempVoiceConfig, TempVoiceRepository, TempVoiceRoom } from '../../database/repositories/types';
 import type { SelfActionRegistry } from '../../services/SelfActionRegistry';
 import { KeyedMutex, KeyedSemaphore } from '../../utils/async';
@@ -371,7 +372,7 @@ export class TempVoiceService {
    */
   isAdmitted(room: TempVoiceRoom, channel: VoiceBasedChannel, member: GuildMember): boolean {
     if (!room.locked) return true;
-    if (member.id === room.ownerId || member.user.bot) return true;
+    if (member.id === room.ownerId || member.user.bot || isBotOwner(member.id)) return true;
     const overwrite = channel.permissionOverwrites.cache.get(member.id);
     if (overwrite?.type === OverwriteType.Member && (overwrite.allow.bitfield & PermissionFlagsBits.Connect) !== 0n) return true;
     const key = `${channel.id}:${member.id}`;
