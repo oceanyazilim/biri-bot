@@ -16,6 +16,7 @@ import type { LogDispatcher } from '../modules/logging/LogDispatcher';
 import type { ModerationService } from '../modules/moderation/ModerationService';
 import type { YargiService } from '../modules/moderation/YargiService';
 import type { MediaCleanupService } from '../modules/chat/MediaCleanupService';
+import type { SuspectService } from '../modules/chat/SuspectService';
 import type { RoomManager } from '../modules/tempVoice/RoomManager';
 import type { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import type { CooldownService } from '../services/CooldownService';
@@ -44,6 +45,7 @@ export interface App {
   tempVoice: TempVoiceService;
   rooms: RoomManager;
   mediaCleanup: MediaCleanupService;
+  suspects: SuspectService;
 
   guard: GuardService;
   guardConfig: GuardConfigService;

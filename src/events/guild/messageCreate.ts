@@ -7,7 +7,7 @@ export default defineEvent({
   name: Events.MessageCreate,
   async execute(app, message) {
     if (!message.inGuild()) return;
-    if (app.env.ENABLE_MEDIA_CLEANUP) app.mediaCleanup.handleMessage(message);
+    if (app.env.ENABLE_MEDIA_CLEANUP) void app.mediaCleanup.handleMessage(message).catch((error: unknown) => app.logger.warn({ err: error }, 'Medya temizliği kontrol edilemedi'));
     if (!app.env.ENABLE_PREFIX_COMMANDS || message.author.bot || message.webhookId) return;
     await handlePrefixMessage(app, message);
   },

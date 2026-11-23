@@ -17,6 +17,8 @@ import type {
   SecurityEventCreate,
   TempVoiceConfigInput,
   TempVoiceRepository,
+  SuspectRecord,
+  SuspectRepository,
   YargiRecord,
   YargiRepository,
 } from './types';
@@ -370,6 +372,28 @@ class PrismaYargiRepository implements YargiRepository {
   }
 }
 
+class PrismaSuspectRepository implements SuspectRepository {
+  constructor(private readonly prisma: PrismaClient) {}
+
+  async upsert(entry: Parameters<SuspectRepository['upsert']>[0]): Promise<void> {
+    const { guildId, userId, userTag, moderatorId, reason } = entry;
+    await this.prisma.suspectRecord.upsert({
+      where: { guildId_userId: { guildId, userId } },
+      create: { guildId, userId, userTag, moderatorId, reason },
+      update: { userTag: userTag ?? undefined, moderatorId, reason },
+    });
+  }
+
+  async remove(guildId: string, userId: string): Promise<boolean> {
+    const { count } = await this.prisma.suspectRecord.deleteMany({ where: { guildId, userId } });
+    return count > 0;
+  }
+
+  list(guildId: string): Promise<SuspectRecord[]> {
+    return this.prisma.suspectRecord.findMany({ where: { guildId }, orderBy: { createdAt: 'desc' } });
+  }
+}
+
 export function createPrismaRepositories(prisma: PrismaClient): Repositories {
   return {
     guilds: new PrismaGuildRepository(prisma),
@@ -378,5 +402,6 @@ export function createPrismaRepositories(prisma: PrismaClient): Repositories {
     logChannels: new PrismaLogChannelRepository(prisma),
     commandAudit: new PrismaCommandAuditRepository(prisma),
     yargi: new PrismaYargiRepository(prisma),
+    suspects: new PrismaSuspectRepository(prisma),
   };
 }

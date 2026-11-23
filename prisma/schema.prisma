@@ -287,3 +287,18 @@ model YargiRecord {
   @@unique([guildId, userId])
   @@index([guildId])
 }
+
+/// Users on the suspect list (`.şüpheli`): their images, GIFs, files and links in the chat channel are deleted after a minute.
+model SuspectRecord {
+  id          String   @id @default(cuid())
+  guildId     String
+  userId      String
+  userTag     String?
+  moderatorId String
+  reason      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([guildId, userId])
+  @@index([guildId])
+}

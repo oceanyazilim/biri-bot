@@ -6,6 +6,9 @@ import { RoomManager } from '../src/modules/tempVoice/RoomManager';
 import { buildHubPanel, buildUserManagement } from '../src/modules/tempVoice/panel';
 import { parsePrefixCommand } from '../src/modules/moderation/prefixParser';
 import { createSilentLogger } from '../src/utils/logger';
+import { SuspectService } from '../src/modules/chat/SuspectService';
+import { SUSPECT_COMMANDS } from '../src/modules/moderation/prefixCommands';
+import { MemorySuspectRepository } from './fakes/memoryRepositories';
 import { asDiscord, type FakeMember } from './fakes/discord';
 import { createVoiceHarness } from './fakes/harness';
 
@@ -177,6 +180,7 @@ describe('chat media cleanup', () => {
       attachments: new Collection(Array.from({ length: opts.attachments ?? 0 }, (_, i) => [String(i), {}])),
       embeds: opts.image ? [{ image: { url: 'x' } }] : [],
       channel: { id: '42', name: opts.channelName ?? '💬・chat' },
+      guildId: 'g',
       author: { id: opts.authorId ?? 'user' },
       client: { user: { id: 'bot' } },
       createdTimestamp: Date.now() - (opts.createdAgoMs ?? 0),
@@ -195,23 +199,23 @@ describe('chat media cleanup', () => {
   });
 
   it('matches chat channels by name when no ids are configured', () => {
-    const service = new MediaCleanupService({ channelIds: [], delayMs: 60_000 }, createSilentLogger());
+    const service = new MediaCleanupService({ channelIds: [], delayMs: 60_000, isSuspect: async () => true }, createSilentLogger());
     expect(normalizeChannelName('💬・Sohbet')).toBe('sohbet');
     expect(service.isCleanedChannel({ id: '1', name: '💬・chat' })).toBe(true);
     expect(service.isCleanedChannel({ id: '1', name: 'genel-sohbet' })).toBe(true);
     expect(service.isCleanedChannel({ id: '1', name: 'duyurular' })).toBe(false);
-    const byId = new MediaCleanupService({ channelIds: ['7'], delayMs: 60_000 }, createSilentLogger());
+    const byId = new MediaCleanupService({ channelIds: ['7'], delayMs: 60_000, isSuspect: async () => true }, createSilentLogger());
     expect(byId.isCleanedChannel({ id: '1', name: 'chat' })).toBe(false);
     expect(byId.isCleanedChannel({ id: '7', name: 'x' })).toBe(true);
   });
 
   it('deletes media one minute after it was posted and leaves text alone', async () => {
     vi.useFakeTimers();
-    const service = new MediaCleanupService({ channelIds: [], delayMs: 60_000 }, createSilentLogger());
+    const service = new MediaCleanupService({ channelIds: [], delayMs: 60_000, isSuspect: async () => true }, createSilentLogger());
     const media = message({ content: 'https://example.com/a.gif' });
     const text = message({ content: 'merhaba' });
     const own = message({ attachments: 1, authorId: 'bot' });
-    for (const m of [media, text, own]) service.handleMessage(asDiscord(m));
+    for (const m of [media, text, own]) await service.handleMessage(asDiscord(m));
 
     await vi.advanceTimersByTimeAsync(59_000);
     expect(media.delete).not.toHaveBeenCalled();
@@ -219,5 +223,34 @@ describe('chat media cleanup', () => {
     expect(media.delete).toHaveBeenCalledTimes(1);
     expect(text.delete).not.toHaveBeenCalled();
     expect(own.delete).not.toHaveBeenCalled();
+  });
+  it('only deletes media from users on the suspect list', async () => {
+    vi.useFakeTimers();
+    const suspects = new SuspectService(new MemorySuspectRepository(), createSilentLogger());
+    await suspects.add({ guildId: 'g', userId: 'şüpheli', userTag: null, moderatorId: 'mod', reason: null });
+    const service = new MediaCleanupService(
+      { channelIds: [], delayMs: 60_000, isSuspect: (guildId, userId) => suspects.isSuspect(guildId, userId) },
+      createSilentLogger(),
+    );
+    const fromSuspect = message({ attachments: 1, authorId: 'şüpheli' });
+    const fromOther = message({ image: true, authorId: 'herkes' });
+    for (const m of [fromSuspect, fromOther]) await service.handleMessage(asDiscord(m));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(fromSuspect.delete).toHaveBeenCalledTimes(1);
+    expect(fromOther.delete).not.toHaveBeenCalled();
+
+    expect(await suspects.remove('g', 'şüpheli')).toBe(true);
+    const later = message({ attachments: 1, authorId: 'şüpheli' });
+    await service.handleMessage(asDiscord(later));
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(later.delete).not.toHaveBeenCalled();
+  });
+
+  it('parses suspect commands with or without Turkish letters', () => {
+    expect(SUSPECT_COMMANDS[parsePrefixCommand('.şüpheli 123', '.')!.name]).toBe('ADD');
+    expect(SUSPECT_COMMANDS[parsePrefixCommand('.ŞÜPHELİ 123', '.')!.name]).toBe('ADD');
+    expect(SUSPECT_COMMANDS[parsePrefixCommand('.supheli 123', '.')!.name]).toBe('ADD');
+    expect(SUSPECT_COMMANDS[parsePrefixCommand('.unşüpheli 123', '.')!.name]).toBe('REMOVE');
+    expect(SUSPECT_COMMANDS[parsePrefixCommand('.şüpheliler', '.')!.name]).toBe('LIST');
   });
 });

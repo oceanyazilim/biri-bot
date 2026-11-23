@@ -54,6 +54,9 @@ const command: SlashCommand = {
                   `\`${prefix}yargi <ID> [sebep]\` — ID ile yasakla (sebep isteğe bağlı)`,
                   `\`${prefix}unyargı <ID> [sebep]\` — Yargıyı (yasağı) kaldır`,
                   `\`${prefix}yargılar\` — Yargılı kullanıcı listesi`,
+                  `\`${prefix}şüpheli <ID> [sebep]\` — Şüpheli listesine ekle (sohbetteki görsel/GIF'leri 1 dk sonra silinir)`,
+                  `\`${prefix}unşüpheli <ID>\` — Şüpheli listesinden çıkar`,
+                  `\`${prefix}şüpheliler\` — Şüpheli listesi`,
                 ]
               : []),
           ].join('\n'),

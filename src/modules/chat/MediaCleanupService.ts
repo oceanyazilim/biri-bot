@@ -6,6 +6,8 @@ export interface MediaCleanupOptions {
   /** Channels to clean. Empty = channels named like "chat" / "sohbet". */
   channelIds: string[];
   delayMs: number;
+  /** Only suspects' media is removed; everyone else may post freely. */
+  isSuspect: (guildId: string, userId: string) => Promise<boolean>;
 }
 
 const LINK_PATTERN = /\bhttps?:\/\/\S+|\bdiscord(?:\.gg|(?:app)?\.com\/invite)\/\S+/i;
@@ -29,8 +31,8 @@ export function isMediaMessage(message: Pick<Message, 'content' | 'attachments' 
 }
 
 /**
- * Removes images, GIFs and links from the chat channel a fixed time after they
- * were posted. Pending deletions live in memory; after a restart `sweepGuild`
+ * Removes images, GIFs and links posted by users on the suspect list from the
+ * chat channel a fixed time after they were posted. Everyone else's media stays. Pending deletions live in memory; after a restart `sweepGuild`
  * catches up on messages that were posted before the bot went down.
  */
 export class MediaCleanupService {
@@ -48,9 +50,10 @@ export class MediaCleanupService {
     return typeof channel.name === 'string' && CHAT_CHANNEL_NAMES.has(normalizeChannelName(channel.name));
   }
 
-  handleMessage(message: Message<true>): void {
+  async handleMessage(message: Message<true>): Promise<void> {
     if (message.author.id === message.client.user.id) return;
     if (!this.isCleanedChannel(message.channel) || !isMediaMessage(message)) return;
+    if (!(await this.options.isSuspect(message.guildId, message.author.id))) return;
     const age = Date.now() - message.createdTimestamp;
     this.schedule(message, this.options.delayMs - age);
   }
@@ -62,7 +65,7 @@ export class MediaCleanupService {
     });
   }
 
-  /** Startup catch-up: deletes overdue media among the latest 100 messages and schedules the rest. */
+  /** Startup catch-up: deletes suspects' overdue media among the latest 100 messages and schedules the rest. */
   async sweepGuild(guild: Guild): Promise<void> {
     const me = guild.members.me;
     for (const channel of guild.channels.cache.values()) {
@@ -82,6 +85,7 @@ export class MediaCleanupService {
     const overdue: Message<true>[] = [];
     for (const message of messages.values()) {
       if (message.author.id === channel.client.user.id || message.pinned || !isMediaMessage(message)) continue;
+      if (!(await this.options.isSuspect(channel.guildId, message.author.id))) continue;
       const age = now - message.createdTimestamp;
       if (age >= this.options.delayMs) overdue.push(message);
       else this.schedule(message, this.options.delayMs - age);

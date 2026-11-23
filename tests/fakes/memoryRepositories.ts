@@ -27,7 +27,9 @@ import type {
   TempVoiceRepository,
   TempVoiceRoom,
   TrustedExecutor,
+  SuspectRecord,
   YargiRecord,
+  SuspectRepository,
   YargiRepository,
 } from '../../src/database/repositories/types';
 
@@ -347,11 +349,33 @@ export class MemoryYargiRepository implements YargiRepository {
   }
 }
 
+export class MemorySuspectRepository implements SuspectRepository {
+  rows: SuspectRecord[] = [];
+  async upsert(entry: Parameters<SuspectRepository['upsert']>[0]) {
+    const existing = this.rows.find((r) => r.guildId === entry.guildId && r.userId === entry.userId);
+    if (existing) {
+      Object.assign(existing, { userTag: entry.userTag ?? existing.userTag, moderatorId: entry.moderatorId, reason: entry.reason, updatedAt: new Date() });
+      return;
+    }
+    const now = new Date();
+    this.rows.push({ id: nextId(), guildId: entry.guildId, userId: entry.userId, userTag: entry.userTag, moderatorId: entry.moderatorId, reason: entry.reason, createdAt: now, updatedAt: now });
+  }
+  async remove(guildId: string, userId: string) {
+    const before = this.rows.length;
+    this.rows = this.rows.filter((r) => !(r.guildId === guildId && r.userId === userId));
+    return this.rows.length < before;
+  }
+  async list(guildId: string) {
+    return this.rows.filter((r) => r.guildId === guildId).map((r) => ({ ...r }));
+  }
+}
+
 export function createMemoryRepositories(): Repositories & {
   tempVoice: MemoryTempVoiceRepository;
   guard: MemoryGuardRepository;
   logChannels: MemoryLogChannelRepository;
   yargi: MemoryYargiRepository;
+  suspects: MemorySuspectRepository;
 } {
   const guilds: GuildRepository = { ensure: async () => undefined, markLeft: async () => undefined };
   const commandAudit: CommandAuditRepository = { record: async () => undefined };
@@ -362,5 +386,6 @@ export function createMemoryRepositories(): Repositories & {
     logChannels: new MemoryLogChannelRepository(),
     commandAudit,
     yargi: new MemoryYargiRepository(),
+    suspects: new MemorySuspectRepository(),
   };
 }

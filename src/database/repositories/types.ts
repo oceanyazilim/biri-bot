@@ -12,6 +12,7 @@ import type {
   TempVoiceConfig,
   TempVoiceRoom,
   TrustedExecutor,
+  SuspectRecord,
   YargiRecord,
 } from '@prisma/client';
 
@@ -29,6 +30,7 @@ export type {
   TempVoiceConfig,
   TempVoiceRoom,
   TrustedExecutor,
+  SuspectRecord,
   YargiRecord,
 };
 
@@ -204,6 +206,13 @@ export interface YargiRepository {
   incrementReban(guildId: string, userId: string): Promise<void>;
 }
 
+export interface SuspectRepository {
+  /** Creates the record or refreshes it (moderator, reason) when the user is added again. */
+  upsert(entry: { guildId: string; userId: string; userTag: string | null; moderatorId: string; reason: string | null }): Promise<void>;
+  remove(guildId: string, userId: string): Promise<boolean>;
+  list(guildId: string): Promise<SuspectRecord[]>;
+}
+
 export interface Repositories {
   guilds: GuildRepository;
   tempVoice: TempVoiceRepository;
@@ -211,4 +220,5 @@ export interface Repositories {
   logChannels: LogChannelRepository;
   commandAudit: CommandAuditRepository;
   yargi: YargiRepository;
+  suspects: SuspectRepository;
 }

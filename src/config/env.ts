@@ -76,8 +76,8 @@ const envSchema = z.object({
     .refine((value) => !value.startsWith('/') && !/\s/.test(value), "PREFIX '/' ile başlayamaz ve boşluk içeremez")
     .default('.'),
   /**
-   * Deletes images, GIFs, files and links from the chat channel MEDIA_CLEANUP_DELAY_SEC
-   * after they were posted. Needs the Message Content intent, like prefix commands.
+   * Deletes images, GIFs, files and links posted by users on the suspect list (`.şüpheli`)
+   * from the chat channel MEDIA_CLEANUP_DELAY_SEC after they were posted. Needs the Message Content intent, like prefix commands.
    */
   ENABLE_MEDIA_CLEANUP: z
     .enum(['true', 'false', '1', '0', 'yes', 'no'])

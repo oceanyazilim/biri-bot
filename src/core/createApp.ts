@@ -19,6 +19,7 @@ import { ModerationService } from '../modules/moderation/ModerationService';
 import { YargiService } from '../modules/moderation/YargiService';
 import { setBotOwners } from '../config/owners';
 import { MediaCleanupService } from '../modules/chat/MediaCleanupService';
+import { SuspectService } from '../modules/chat/SuspectService';
 import { RoomManager } from '../modules/tempVoice/RoomManager';
 import { TempVoiceService } from '../modules/tempVoice/TempVoiceService';
 import { CooldownService } from '../services/CooldownService';
@@ -80,8 +81,13 @@ export function createApp(env: Env, logger: Logger): App {
   tempVoice.setLogSink(voiceLog);
   rooms.setLogSink(voiceLog);
 
+  const suspects = new SuspectService(repos.suspects, logger.child({ module: 'suspects' }));
   const mediaCleanup = new MediaCleanupService(
-    { channelIds: env.MEDIA_CLEANUP_CHANNEL_IDS, delayMs: env.MEDIA_CLEANUP_DELAY_SEC * 1000 },
+    {
+      channelIds: env.MEDIA_CLEANUP_CHANNEL_IDS,
+      delayMs: env.MEDIA_CLEANUP_DELAY_SEC * 1000,
+      isSuspect: (guildId, userId) => suspects.isSuspect(guildId, userId),
+    },
     logger.child({ module: 'mediaCleanup' }),
   );
 
@@ -115,6 +121,7 @@ export function createApp(env: Env, logger: Logger): App {
     tempVoice,
     rooms,
     mediaCleanup,
+    suspects,
     guard,
     guardConfig,
     trust,
